@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"strings"
 
 	"backend-go/internal/companies"
 	"backend-go/internal/users"
@@ -18,8 +19,11 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 		DB: db,
 	}
 }
+
 func (r *Repository) CompanyEmailExists(email string) (bool, error) {
 	var exists bool
+
+	email = strings.ToLower(strings.TrimSpace(email))
 
 	query := `
 		SELECT EXISTS (
@@ -38,6 +42,8 @@ func (r *Repository) CompanyEmailExists(email string) (bool, error) {
 func (r *Repository) EmailExists(email string) (bool, error) {
 	var exists bool
 
+	email = strings.ToLower(strings.TrimSpace(email))
+
 	query := `
 		SELECT EXISTS (
 			SELECT 1 FROM users WHERE email = $1
@@ -54,6 +60,8 @@ func (r *Repository) EmailExists(email string) (bool, error) {
 
 func (r *Repository) CNPJExists(cnpj string) (bool, error) {
 	var exists bool
+
+	cnpj = cleanOnlyNumbers(cnpj)
 
 	query := `
 		SELECT EXISTS (
@@ -76,6 +84,10 @@ func (r *Repository) CreateCompanyAndUser(company companies.Company, user users.
 	}
 
 	defer tx.Rollback(context.Background())
+
+	company.CNPJ = cleanOnlyNumbers(company.CNPJ)
+	company.CorporateEmail = strings.ToLower(strings.TrimSpace(company.CorporateEmail))
+	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
 
 	var companyID string
 

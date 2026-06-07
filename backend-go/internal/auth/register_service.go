@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"net"
 	"strings"
 	"unicode"
 
@@ -22,6 +23,14 @@ func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompan
 	}
 
 	if err := s.validateResponsibleName(input.ResponsibleName); err != nil {
+		return nil, err
+	}
+
+	if err := s.validateCorporateEmail(input.CorporateEmail); err != nil {
+		return nil, err
+	}
+
+	if err := s.validateCorporateEmail(input.ResponsibleEmail); err != nil {
 		return nil, err
 	}
 
@@ -102,6 +111,24 @@ func (s *Service) validateRegisterCompanyInput(input RegisterCompanyRequest) err
 
 	if !input.AcceptedPrivacyPolicy {
 		return errors.New("é necessário aceitar a política de privacidade")
+	}
+
+	return nil
+}
+
+func (s *Service) validateCorporateEmail(email string) error {
+	domain, err := getEmailDomain(email)
+	if err != nil {
+		return err
+	}
+
+	if domainNotAllowed[domain] {
+		return errors.New("use um e-mail corporativo com domínio próprio da empresa")
+	}
+
+	mxRecords, err := net.LookupMX(domain)
+	if err != nil || len(mxRecords) == 0 {
+		return errors.New("o domínio do e-mail não possui servidor de e-mail válido")
 	}
 
 	return nil
@@ -244,6 +271,8 @@ func (s *Service) validatePhone(phone string) error {
 }
 
 func (s *Service) validateUserDoesNotExist(email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
 	emailExists, err := s.Repository.EmailExists(email)
 	if err != nil {
 		return err
@@ -257,6 +286,8 @@ func (s *Service) validateUserDoesNotExist(email string) error {
 }
 
 func (s *Service) validateCompanyDoesNotExist(cnpj string) error {
+	cnpj = cleanOnlyNumbers(cnpj)
+
 	cnpjExists, err := s.Repository.CNPJExists(cnpj)
 	if err != nil {
 		return err
@@ -270,6 +301,8 @@ func (s *Service) validateCompanyDoesNotExist(cnpj string) error {
 }
 
 func (s *Service) validateCompanyEmailDoesNotExist(email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
 	emailExists, err := s.Repository.CompanyEmailExists(email)
 	if err != nil {
 		return err
@@ -291,23 +324,20 @@ func (s *Service) hashPassword(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-// buildCompany monta o model Company a partir dos dados recebidos do frontend.
 func (s *Service) buildCompany(input RegisterCompanyRequest) companies.Company {
 	return companies.Company{
 		Name:           strings.TrimSpace(input.CompanyName),
 		CNPJ:           cleanOnlyNumbers(input.CNPJ),
-		CorporateEmail: strings.TrimSpace(input.CorporateEmail),
+		CorporateEmail: strings.ToLower(strings.TrimSpace(input.CorporateEmail)),
 		Phone:          cleanOnlyNumbers(input.CompanyPhone),
 		Status:         companies.CompanyStatusPendingPlanSelection,
 	}
 }
 
-// buildCompanyAdminUser monta o usuário responsável pela empresa.
-// Esse usuário nasce como COMPANY_ADMIN e fica pendente de escolha de plano.
 func (s *Service) buildCompanyAdminUser(input RegisterCompanyRequest, hashedPassword string) users.User {
 	return users.User{
 		Name:                  strings.TrimSpace(input.ResponsibleName),
-		Email:                 strings.TrimSpace(input.ResponsibleEmail),
+		Email:                 strings.ToLower(strings.TrimSpace(input.ResponsibleEmail)),
 		PasswordHash:          hashedPassword,
 		Role:                  users.RoleCompanyAdmin,
 		Status:                users.UserStatusPendingPlanSelection,
@@ -373,4 +403,45 @@ func isRepeatedDigits(value string) bool {
 	}
 
 	return true
+}
+
+func getEmailDomain(email string) (string, error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+
+	parts := strings.Split(email, "@")
+
+	if len(parts) != 2 {
+		return "", errors.New("e-mail inválido")
+	}
+
+	if parts[0] == "" || parts[1] == "" {
+		return "", errors.New("e-mail inválido")
+	}
+
+	return parts[1], nil
+}
+
+var domainNotAllowed = map[string]bool{
+	"gmail.com":      true,
+	"hotmail.com":    true,
+	"outlook.com":    true,
+	"yahoo.com":      true,
+	"icloud.com":     true,
+	"live.com":       true,
+	"msn.com":        true,
+	"bol.com.br":     true,
+	"uol.com.br":     true,
+	"terra.com.br":   true,
+	"proton.me":      true,
+	"protonmail.com": true,
+	"mail.com":       true,
+	"aol.com":        true,
+	"gmx.com":        true,
+
+	// Temporários / descartáveis comuns
+	"10minutemail.com":  true,
+	"tempmail.com":      true,
+	"guerrillamail.com": true,
+	"mailinator.com":    true,
+	"yopmail.com":       true,
 }
