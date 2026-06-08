@@ -23,5 +23,5 @@ func NewRoutes(db *pgxpool.Pool) *Routes {
 func (r *Routes) RegisterRoutes(rg *gin.RouterGroup) {
 	plans := rg.Group("/plans")
 
-	plans.POST("/register-plan", r.Handler.RegisterPlan)
+	plans.POST("/register-plan", r.Handler.CreateSession)
 }

@@ -12,6 +12,9 @@ type Config struct {
 	AppEnv      string
 	DatabaseURL string
 	JWTSecret   string
+
+	ASAASBaseURL string
+	ASAASAPIKey  string
 }
 
 func LoadConfig() *Config {
@@ -25,6 +28,9 @@ func LoadConfig() *Config {
 		AppEnv:      getEnv("APP_ENV", "development"),
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		JWTSecret:   getEnv("JWT_SECRET", ""),
+
+		ASAASBaseURL: getEnv("ASAAS_BASE_URL", "https://api-sandbox.asaas.com/v3"),
+		ASAASAPIKey:  getEnv("ASAAS_API_KEY", ""),
 	}
 }
 
