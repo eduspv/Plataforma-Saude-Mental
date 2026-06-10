@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS plans (
 
     price_cents INTEGER NOT NULL,
     currency VARCHAR(10) NOT NULL DEFAULT 'BRL',
+    due_date_type_days INTEGER NOT NULL DEFAULT '1'
 
     billing_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly',
 

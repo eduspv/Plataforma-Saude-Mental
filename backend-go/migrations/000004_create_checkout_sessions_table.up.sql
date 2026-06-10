@@ -5,8 +5,11 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
     company_id UUID NOT NULL,
     plan_id UUID NOT NULL,
 
-    provider VARCHAR(50) NOT NULL,
+    provider VARCHAR(50) NOT NULL DEFAULT 'ASAAS',
     provider_session_id VARCHAR(255),
+
+    billing_type VARCHAR(40) NOT NULL,
+    charge_type VARCHAR(40) NOT NULL,
 
     status VARCHAR(40) NOT NULL DEFAULT 'pending',
 
@@ -17,6 +20,9 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
 
     expires_at TIMESTAMPTZ,
     paid_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+
+    failure_reason TEXT,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -42,6 +48,23 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
             'expired',
             'cancelled',
             'failed'
+        )
+    ),
+
+    CONSTRAINT checkout_sessions_billing_type_check CHECK (
+        billing_type IN (
+            'UNDEFINED',
+            'BOLETO',
+            'CREDIT_CARD',
+            'PIX'
+        )
+    ),
+
+    CONSTRAINT checkout_sessions_charge_type_check CHECK (
+        charge_type IN (
+            'DETACHED',
+            'RECURRENT',
+            'INSTALLMENT'
         )
     )
 );

@@ -11,15 +11,21 @@ import (
 func main() {
 	cfg := config.LoadConfig()
 
+	log.Println("[MAIN] Config carregada")
+	log.Println("[MAIN] APP_PORT:", cfg.AppPort)
+	log.Println("[MAIN] DATABASE_URL carregado?", cfg.DatabaseURL != "")
+	log.Println("[MAIN] JWT_SECRET carregado?", cfg.JWTSecret != "")
+	log.Println("[MAIN] ASAAS_API_KEY carregado?", cfg.ASAASAPIKey != "")
+
 	db := database.Connect(cfg.DatabaseURL)
 	defer db.Close()
 
-	r := router.SetupRouter(db, cfg.JWTSecret)
+	r := router.SetupRouter(db, cfg.JWTSecret, cfg.ASAASAPIKey)
 
-	log.Println("Servidor rodando na porta " + cfg.AppPort)
+	log.Println("[MAIN] Servidor rodando na porta " + cfg.AppPort)
 
 	err := r.Run(":" + cfg.AppPort)
 	if err != nil {
-		log.Fatal("Erro ao iniciar servidor: ", err)
+		log.Fatal("[MAIN] Erro ao iniciar servidor: ", err)
 	}
 }

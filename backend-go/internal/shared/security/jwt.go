@@ -16,14 +16,20 @@ type JWTClaims struct {
 }
 
 func GenerateJWT(secret string, userID string, companyID string, role string, status string) (string, error) {
+	now := time.Now()
+	expiresAt := now.Add(24 * time.Hour)
+
+	println("[JWT] Agora:", now.String())
+	println("[JWT] Expira em:", expiresAt.String())
+
 	claims := JWTClaims{
 		UserID:    userID,
 		CompanyID: companyID,
 		Role:      role,
 		Status:    status,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
 
@@ -31,7 +37,6 @@ func GenerateJWT(secret string, userID string, companyID string, role string, st
 
 	return token.SignedString([]byte(secret))
 }
-
 func ValidateJWT(tokenString string, secret string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secret), nil

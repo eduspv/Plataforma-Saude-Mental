@@ -9,10 +9,11 @@ type Routes struct {
 	Handler *Handler
 }
 
-func NewRoutes(db *pgxpool.Pool) *Routes {
+func NewRoutes(db *pgxpool.Pool, APIKey string) *Routes {
 	repository := NewRepository(db)
+	api := NewAPIClient(APIKey)
 
-	service := NewService(repository)
+	service := NewService(repository, api)
 	handler := NewHandler(service)
 
 	return &Routes{
@@ -21,7 +22,7 @@ func NewRoutes(db *pgxpool.Pool) *Routes {
 }
 
 func (r *Routes) RegisterRoutes(rg *gin.RouterGroup) {
-	plans := rg.Group("/plans")
+	plans := rg.Group("/checkout")
 
-	plans.POST("/register-plan", r.Handler.CreateSession)
+	plans.POST("/create-session", r.Handler.CreateSession)
 }
