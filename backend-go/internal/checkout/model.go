@@ -1,6 +1,9 @@
 package checkout
 
-import "time"
+import (
+	"backend-go/internal/plans"
+	"time"
+)
 
 const (
 	CheckoutProviderAsaas = "ASAAS"
@@ -31,4 +34,10 @@ type CheckoutSession struct {
 	FailureReason     *string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+}
+
+type Checkout func(CreateCheckoutSessionInput, *plans.Plan)
+
+type CHeckoutBillingTypes struct {
+	BillingMethods map[BillingType]Checkout
 }

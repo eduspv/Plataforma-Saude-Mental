@@ -45,6 +45,10 @@ func (s *Service) RegisterCheckoutSession(input CreateCheckoutSessionInput) (*Ch
 		return nil, err
 	}
 
+	next := map[BillingType]Checkout{
+		BillingTypePix: s.RegisterPIXCheckoutSession,
+	}
+
 	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
 	checkoutSession, err = s.Repository.CreateCheckoutSession(checkoutSession)
 	if err != nil {
@@ -72,6 +76,10 @@ func (s *Service) RegisterCheckoutSession(input CreateCheckoutSessionInput) (*Ch
 		AmountCents:       plan.PriceCents,
 		Currency:          plan.Currency,
 	}, nil
+}
+
+func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) {
+
 }
 
 func (s *Service) validatePlanID(planID string) error {
@@ -158,4 +166,9 @@ func (s *Service) NormalizeCheckoutSessionData(input CreateCheckoutSessionInput,
 		AmountCents: plan.PriceCents,
 		Currency:    plan.Currency,
 	}
+}
+
+func (s *Service) ServeFromBillingType(BillingType *BillingType){
+	BillingMethods:= CHeckoutBillingTypes.BillingMethods[BillingType]
+	if BillingType 
 }
