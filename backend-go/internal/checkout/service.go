@@ -21,67 +21,105 @@ func NewService(repository *Repository, api *APIClient) *Service {
 	}
 }
 
+func (s *Service) checkoutMethods() CheckoutBillingTypes {
+	return CheckoutBillingTypes{
+		BillingMethods: map[BillingType]Checkout{
+			BillingTypePix:        s.RegisterPIXCheckoutSession,
+			BillingTypeBoleto:     s.RegisterBoletoCheckoutSession,
+			BillingTypeCreditCard: s.RegisterCreditCardCheckoutSession,
+			BillingTypeUndefined:  s.RegisterUndefinedCheckoutSession,
+		},
+	}
+}
+
 func (s *Service) RegisterCheckoutSession(input CreateCheckoutSessionInput) (*CheckoutSessionResponse, error) {
 	if err := s.validatePlanID(input.PlanID); err != nil {
 		return nil, err
 	}
+
 	if err := s.validateJWTContextID(input); err != nil {
 		return nil, err
 	}
+
 	if err := s.validateUserCanStartCheckout(input.Auth.Status); err != nil {
 		return nil, err
 	}
+
 	if err := s.validateRole(input.Auth.Role); err != nil {
 		return nil, err
 	}
+
 	if err := s.validateBillingType(input.BillingType); err != nil {
 		return nil, err
 	}
+
 	if err := s.validateChargeType(input.ChargeType); err != nil {
 		return nil, err
 	}
+
 	plan, err := s.Repository.GetActivePlanByID(input.PlanID)
 	if err != nil {
 		return nil, err
 	}
 
-	next := map[BillingType]Checkout{
-		BillingTypePix: s.RegisterPIXCheckoutSession,
-	}
+	billingMethods := s.checkoutMethods()
 
+	return s.ServeFromBillingType(
+		input.BillingType,
+		input,
+		plan,
+		billingMethods,
+	)
+}
+
+func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
 	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
-	checkoutSession, err = s.Repository.CreateCheckoutSession(checkoutSession)
+
+	checkoutSession, err := s.Repository.CreateCheckoutSession(checkoutSession)
 	if err != nil {
 		return nil, err
 	}
 
 	body := s.gettingPaymentLinkData(checkoutSession, plan)
-	log.Print("Esse é o metodo de pagamento: ", body.BillingType)
-	log.Print("Esta vindo o: ", body.DueDateLimitDays)
-	PaymentResponse, err := s.Api.GettingPaymentLink(body)
+
+	paymentResponse, err := s.Api.GettingPaymentLink(body)
 	if err != nil {
 		return nil, err
 	}
+
+	checkoutURL := paymentResponse.URL
+	checkoutSession.CheckoutURL = &checkoutURL
+
+	// Se sua resposta do Asaas tiver ID, use isso:
+	// providerSessionID := paymentResponse.ID
+	// checkoutSession.ProviderSessionID = &providerSessionID
 
 	checkoutSession, err = s.Repository.UpdateCheckoutSession(checkoutSession)
 	if err != nil {
 		return nil, err
 	}
 
-	// por enquanto só para testar
 	return &CheckoutSessionResponse{
 		CheckoutSessionID: checkoutSession.ID,
-		CheckoutURL:       PaymentResponse.URL,
-		Status:            "pending",
+		CheckoutURL:       paymentResponse.URL,
+		Status:            checkoutSession.Status,
 		AmountCents:       plan.PriceCents,
 		Currency:          plan.Currency,
 	}, nil
 }
 
-func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) {
-
+func (s *Service) RegisterBoletoCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	return nil, errors.New("checkout por boleto ainda não implementado")
 }
 
+func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	return nil, errors.New("checkout por cartão ainda não implementado")
+}
+func (s *Service) RegisterUndefinedCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	return nil, errors.New("checkout multiplo ainda não implementado")
+}
+
+// /////////////////////////////////////Validações///////////////////////////////////////////////////
 func (s *Service) validatePlanID(planID string) error {
 	if planID == "" {
 		return errors.New("o id do plano é obrigatório")
@@ -168,7 +206,11 @@ func (s *Service) NormalizeCheckoutSessionData(input CreateCheckoutSessionInput,
 	}
 }
 
-func (s *Service) ServeFromBillingType(BillingType *BillingType){
-	BillingMethods:= CHeckoutBillingTypes.BillingMethods[BillingType]
-	if BillingType 
+func (s *Service) ServeFromBillingType(billingType BillingType, input CreateCheckoutSessionInput, plan *plans.Plan, billingMethods CheckoutBillingTypes) (*CheckoutSessionResponse, error) {
+	checkout, exists := billingMethods.BillingMethods[billingType]
+	if !exists {
+		return nil, errors.New("método de pagamento não implementado")
+	}
+
+	return checkout(input, plan)
 }

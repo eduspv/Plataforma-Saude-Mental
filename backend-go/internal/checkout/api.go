@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -29,6 +30,16 @@ func (a *APIClient) GettingPaymentLink(body *CreatePaymentLink) (*PaymentLinkRes
 	if body == nil {
 		return nil, errors.New("dados do link de pagamento não informados")
 	}
+
+	AllPaymentsLinks, err := a.GetAllPaymentsLinks(body.ExternalReference)
+	if err != nil {
+		return nil, err
+	}
+	if AllPaymentsLinks.TotalCount >= 4 {
+		return nil, errors.New("não pode criar mais um link de pagamento voce deve pagar com algum dos links enviados anteriormente")
+	}
+
+	//TODO: externalReference tem que ser algo que não muda toda checkout session nova para que a função acima funcione
 
 	var paymentLinkResponse PaymentLinkResponse
 
@@ -79,6 +90,39 @@ func (a *APIClient) GettingPaymentLink(body *CreatePaymentLink) (*PaymentLinkRes
 	return &paymentLinkResponse, nil
 }
 
+func (a *APIClient) GetAllPaymentsLinks(extRef string) (*PaymentLinksListResponse, error) {
+	baseURL := "https://api-sandbox.asaas.com/v3/paymentLinks"
+
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	query := u.Query()
+	query.Set("externalReference", extRef)
+	u.RawQuery = query.Encode()
+
+	resp, err := a.HTTPClient.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bodyReq, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var paymentResponse PaymentLinksListResponse
+
+	err = json.Unmarshal(bodyReq, &paymentResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return &paymentResponse, nil
+}
+
 func (a *APIClient) ValidateLinkResponse(payLinkRes *PaymentLinkResponse, request *CreatePaymentLink) error {
 	if payLinkRes == nil {
 		return errors.New("o Asaas não enviou resposta")
@@ -114,3 +158,7 @@ func (a *APIClient) ValidateLinkResponse(payLinkRes *PaymentLinkResponse, reques
 
 	return nil
 }
+
+/*func (a *APIClient) verifyNumberOfREquisitions(payLinkRes PaymentLinkResponse) error {
+
+}*/

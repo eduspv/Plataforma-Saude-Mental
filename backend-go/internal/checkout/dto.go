@@ -63,3 +63,32 @@ type CheckoutSessionResponse struct {
 	AmountCents       int    `json:"amount_cents"`
 	Currency          string `json:"currency"`
 }
+
+type PaymentLinksListResponse struct {
+	Object     string                `json:"object"`
+	HasMore    bool                  `json:"hasMore"`
+	TotalCount int                   `json:"totalCount"`
+	Limit      int                   `json:"limit"`
+	Offset     int                   `json:"offset"`
+	Data       []PaymentLinkResponse `json:"data"`
+}
+
+type PaymentLinkDataResponse struct {
+	ID                  string  `json:"id"`
+	Name                string  `json:"name"`
+	Value               float64 `json:"value"`
+	Active              bool    `json:"active"`
+	ChargeType          string  `json:"chargeType"`
+	URL                 string  `json:"url"`
+	BillingType         string  `json:"billingType"`
+	SubscriptionCycle   string  `json:"subscriptionCycle"`
+	Description         string  `json:"description"`
+	EndDate             string  `json:"endDate"`
+	Deleted             bool    `json:"deleted"`
+	ViewCount           int     `json:"viewCount"`
+	MaxInstallmentCount int     `json:"maxInstallmentCount"`
+	DueDateLimitDays    int     `json:"dueDateLimitDays"`
+	NotificationEnabled bool    `json:"notificationEnabled"`
+	IsAddressRequired   bool    `json:"isAddressRequired"`
+	ExternalReference   string  `json:"externalReference"`
+}

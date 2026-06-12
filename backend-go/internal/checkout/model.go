@@ -36,8 +36,8 @@ type CheckoutSession struct {
 	UpdatedAt         time.Time
 }
 
-type Checkout func(CreateCheckoutSessionInput, *plans.Plan)
+type Checkout func(CreateCheckoutSessionInput, *plans.Plan) (*CheckoutSessionResponse, error)
 
-type CHeckoutBillingTypes struct {
+type CheckoutBillingTypes struct {
 	BillingMethods map[BillingType]Checkout
 }
