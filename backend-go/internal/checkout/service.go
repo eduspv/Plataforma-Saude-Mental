@@ -5,6 +5,7 @@ import (
 	"backend-go/internal/users"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -62,6 +63,10 @@ func (s *Service) RegisterCheckoutSession(input CreateCheckoutSessionInput) (*Ch
 		return nil, err
 	}
 
+	if err := s.ValidatePendingCheckoutSessions(input.Auth.CompanyID); err != nil {
+		return nil, err
+	}
+
 	billingMethods := s.checkoutMethods()
 
 	return s.ServeFromBillingType(
@@ -74,13 +79,14 @@ func (s *Service) RegisterCheckoutSession(input CreateCheckoutSessionInput) (*Ch
 
 func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
 	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
+	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
 
 	checkoutSession, err := s.Repository.CreateCheckoutSession(checkoutSession)
 	if err != nil {
 		return nil, err
 	}
 
-	body := s.gettingPaymentLinkData(checkoutSession, plan)
+	body := s.getPixPaymentLinkData(checkoutSession, plan)
 
 	paymentResponse, err := s.Api.GettingPaymentLink(body)
 	if err != nil {
@@ -103,18 +109,54 @@ func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, p
 		CheckoutSessionID: checkoutSession.ID,
 		CheckoutURL:       paymentResponse.URL,
 		Status:            checkoutSession.Status,
-		AmountCents:       plan.PriceCents,
+		Value:             plan.PriceCents,
 		Currency:          plan.Currency,
 	}, nil
 }
+func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
+	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
+
+	checkoutSession, err := s.validateCreditCardForBd(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	checkoutSession, err = s.Repository.CreateCheckoutSession(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	body := s.getCreditCardPaymentLinkData(checkoutSession, plan)
+
+	paymentResponse, err := s.Api.GettingPaymentLink(body)
+	if err != nil {
+		return nil, err
+	}
+
+	checkoutURL := paymentResponse.URL
+	checkoutSession.CheckoutURL = &checkoutURL
+
+	checkoutSession, err = s.Repository.UpdateCheckoutSession(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CheckoutSessionResponse{
+		CheckoutSessionID: checkoutSession.ID,
+		CheckoutURL:       paymentResponse.URL,
+		Status:            checkoutSession.Status,
+		Value:             plan.PriceCents,
+		Currency:          plan.Currency,
+	}, nil
+}
+
+//TODO BOLETO CHECKOUT E UNDEFEINED CHECKOUT e testar o credit card checkout session
 
 func (s *Service) RegisterBoletoCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
 	return nil, errors.New("checkout por boleto ainda não implementado")
 }
 
-func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
-	return nil, errors.New("checkout por cartão ainda não implementado")
-}
 func (s *Service) RegisterUndefinedCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
 	return nil, errors.New("checkout multiplo ainda não implementado")
 }
@@ -182,27 +224,67 @@ func (s *Service) validateUserCanStartCheckout(status string) error {
 	return errors.New("usuário não pode iniciar checkout nesse status")
 }
 
-func (s *Service) gettingPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
+func (s *Service) getPixPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
 	return &CreatePaymentLink{
-		Name:              plan.Name,
-		Value:             float64(ck.AmountCents) / 100,
-		BillingType:       ck.BillingType,
-		ChargeType:        ck.ChargeType,
-		ExternalReference: ck.ID,
+		Name:                plan.Name,
+		Value:               float64(ck.AmountCents) / 100,
+		BillingType:         ck.BillingType,
+		ChargeType:          ck.ChargeType,
+		ExternalReference:   ck.ID,
+		NotificationEnabled: &ck.NotificationEnabled,
+	}
+}
+
+func (s *Service) getCreditCardPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
+	endDate := ""
+	if ck.EndDate != nil {
+		endDate = ck.EndDate.Format("2006-01-02")
+	}
+
+	var subscriptionCycle SubscriptionCycle
+	if ck.SubscriptionCycle != nil {
+		subscriptionCycle = SubscriptionCycle(*ck.SubscriptionCycle)
+	}
+
+	return &CreatePaymentLink{
+		Name:                plan.Name,
+		Value:               float64(ck.AmountCents) / 100,
+		BillingType:         ck.BillingType,
+		ChargeType:          ck.ChargeType,
+		ExternalReference:   ck.ID,
+		NotificationEnabled: &ck.NotificationEnabled,
+
+		EndDate:             endDate,
+		SubscriptionCycle:   subscriptionCycle,
+		MaxInstallmentCount: ck.MaxInstallmentCount,
+		DueDateLimitDays:    ck.DueDateLimitDays,
 	}
 }
 
 func (s *Service) NormalizeCheckoutSessionData(input CreateCheckoutSessionInput, plan *plans.Plan) *CheckoutSession {
+	var endDate *time.Time
+
+	if input.EndDate != "" {
+		parsedEndDate, err := time.Parse("2006-01-02", input.EndDate)
+		if err == nil {
+			endDate = &parsedEndDate
+		}
+	}
+
 	return &CheckoutSession{
-		UserID:      input.Auth.UserID,
-		CompanyID:   input.Auth.CompanyID,
-		PlanID:      input.PlanID,
-		Provider:    CheckoutProviderAsaas,
-		BillingType: input.BillingType,
-		ChargeType:  input.ChargeType,
-		Status:      CheckoutStatusPending,
-		AmountCents: plan.PriceCents,
-		Currency:    plan.Currency,
+		UserID:              input.Auth.UserID,
+		CompanyID:           input.Auth.CompanyID,
+		PlanID:              input.PlanID,
+		Provider:            CheckoutProviderAsaas,
+		BillingType:         input.BillingType,
+		ChargeType:          input.ChargeType,
+		Status:              CheckoutStatusPending,
+		AmountCents:         plan.PriceCents,
+		Currency:            plan.Currency,
+		DueDateLimitDays:    input.DueDateLimitDays,
+		MaxInstallmentCount: input.MaxInstallmentCount,
+		EndDate:             endDate,
+		NotificationEnabled: false,
 	}
 }
 
@@ -213,4 +295,23 @@ func (s *Service) ServeFromBillingType(billingType BillingType, input CreateChec
 	}
 
 	return checkout(input, plan)
+}
+
+func (s *Service) ValidatePendingCheckoutSessions(CompanyID string) error {
+	count, err := s.Repository.CountPendingCheckoutSessionsByCompany(CompanyID)
+	if err != nil {
+		return err
+	}
+
+	if count >= 4 {
+		return errors.New("não é possível criar outro link de pagamento; utilize um dos links enviados anteriormente")
+	}
+	return nil
+}
+
+func (s *Service) validateNotificationsEnabled(notificationsEnabled bool) bool {
+	if notificationsEnabled != false {
+		notificationsEnabled = false
+	}
+	return notificationsEnabled
 }

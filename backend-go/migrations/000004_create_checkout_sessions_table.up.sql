@@ -18,6 +18,15 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
 
     checkout_url TEXT,
 
+    -- Dados enviados ao Asaas
+    external_reference VARCHAR(255),
+    description TEXT,
+    due_date_limit_days INTEGER,
+    max_installment_count INTEGER,
+    subscription_cycle VARCHAR(40),
+    end_date DATE,
+    notification_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+
     expires_at TIMESTAMPTZ,
     paid_at TIMESTAMPTZ,
     failed_at TIMESTAMPTZ,
@@ -65,6 +74,29 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
             'DETACHED',
             'RECURRENT',
             'INSTALLMENT'
+        )
+    ),
+
+    CONSTRAINT checkout_sessions_due_date_limit_days_check CHECK (
+        due_date_limit_days IS NULL
+        OR due_date_limit_days >= 1
+    ),
+
+    CONSTRAINT checkout_sessions_max_installment_count_check CHECK (
+        max_installment_count IS NULL
+        OR max_installment_count >= 1
+    ),
+
+    CONSTRAINT checkout_sessions_subscription_cycle_check CHECK (
+        subscription_cycle IS NULL
+        OR subscription_cycle IN (
+            'WEEKLY',
+            'BIWEEKLY',
+            'MONTHLY',
+            'BIMONTHLY',
+            'QUARTERLY',
+            'SEMIANNUALLY',
+            'YEARLY'
         )
     )
 );

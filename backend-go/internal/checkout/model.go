@@ -22,18 +22,33 @@ type CheckoutSession struct {
 	PlanID            string
 	Provider          string
 	ProviderSessionID *string
-	BillingType       BillingType
-	ChargeType        ChargeType
-	Status            string
-	AmountCents       int
-	Currency          string
-	CheckoutURL       *string
-	ExpiresAt         *time.Time
-	PaidAt            *time.Time
-	FailedAt          *time.Time
-	FailureReason     *string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+
+	BillingType BillingType
+	ChargeType  ChargeType
+	Status      string
+
+	AmountCents int
+	Currency    string
+
+	CheckoutURL *string
+
+	ExternalReference *string
+	Description       *string
+
+	DueDateLimitDays    *int
+	MaxInstallmentCount *int
+	SubscriptionCycle   *string
+	EndDate             *time.Time
+
+	NotificationEnabled bool
+
+	ExpiresAt     *time.Time
+	PaidAt        *time.Time
+	FailedAt      *time.Time
+	FailureReason *string
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Checkout func(CreateCheckoutSessionInput, *plans.Plan) (*CheckoutSessionResponse, error)

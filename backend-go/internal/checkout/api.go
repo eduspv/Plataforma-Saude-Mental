@@ -30,17 +30,6 @@ func (a *APIClient) GettingPaymentLink(body *CreatePaymentLink) (*PaymentLinkRes
 	if body == nil {
 		return nil, errors.New("dados do link de pagamento não informados")
 	}
-
-	AllPaymentsLinks, err := a.GetAllPaymentsLinks(body.ExternalReference)
-	if err != nil {
-		return nil, err
-	}
-	if AllPaymentsLinks.TotalCount >= 4 {
-		return nil, errors.New("não pode criar mais um link de pagamento voce deve pagar com algum dos links enviados anteriormente")
-	}
-
-	//TODO: externalReference tem que ser algo que não muda toda checkout session nova para que a função acima funcione
-
 	var paymentLinkResponse PaymentLinkResponse
 
 	payloadBytes, err := json.Marshal(body)
@@ -148,17 +137,13 @@ func (a *APIClient) ValidateLinkResponse(payLinkRes *PaymentLinkResponse, reques
 		return errors.New("o valor retornado pelo Asaas é diferente do valor enviado")
 	}
 
-	if payLinkRes.BillingType != string(request.BillingType) {
+	if payLinkRes.BillingType != request.BillingType {
 		return errors.New("o tipo de pagamento retornado pelo Asaas é diferente do enviado")
 	}
 
-	if payLinkRes.ChargeType != string(request.ChargeType) {
+	if payLinkRes.ChargeType != request.ChargeType {
 		return errors.New("o tipo de cobrança retornado pelo Asaas é diferente do enviado")
 	}
 
 	return nil
 }
-
-/*func (a *APIClient) verifyNumberOfREquisitions(payLinkRes PaymentLinkResponse) error {
-
-}*/
