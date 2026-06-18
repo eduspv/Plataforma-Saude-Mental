@@ -5,15 +5,13 @@ type CheckoutSessionRequest struct {
 	BillingType BillingType `json:"billing_type" binding:"required"`
 	ChargeType  ChargeType  `json:"charge_type" binding:"required"`
 
-	// Campos opcionais, dependendo do método de pagamento
-	DueDateLimitDays    *int              `json:"due_date_limit_days,omitempty"`
+	DueDateLimitDays    *int32            `json:"due_date_limit_days,omitempty"`
 	MaxInstallmentCount *int              `json:"max_installment_count,omitempty"`
 	SubscriptionCycle   SubscriptionCycle `json:"subscription_cycle,omitempty"`
 
 	Description string `json:"description,omitempty"`
 	EndDate     string `json:"end_date,omitempty"`
 
-	IsAddressRequired   *bool `json:"is_address_required,omitempty"`
 	NotificationEnabled *bool `json:"notification_enabled,omitempty"`
 }
 
@@ -30,7 +28,7 @@ type CreateCheckoutSessionInput struct {
 	ChargeType  ChargeType
 	Auth        AuthContext
 
-	DueDateLimitDays    *int
+	DueDateLimitDays    *int32
 	MaxInstallmentCount *int
 	SubscriptionCycle   SubscriptionCycle
 
@@ -76,7 +74,7 @@ type CreatePaymentLink struct {
 
 	ExternalReference string `json:"externalReference,omitempty"`
 
-	DueDateLimitDays    *int              `json:"dueDateLimitDays,omitempty"`
+	DueDateLimitDays    *int32            `json:"dueDateLimitDays,omitempty"`
 	MaxInstallmentCount *int              `json:"maxInstallmentCount,omitempty"`
 	SubscriptionCycle   SubscriptionCycle `json:"subscriptionCycle,omitempty"`
 

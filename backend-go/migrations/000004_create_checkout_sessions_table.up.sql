@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
     subscription_cycle VARCHAR(40),
     end_date DATE,
     notification_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    is_address_required BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- URLs opcionais de redirecionamento
+    success_url TEXT,
+    cancel_url TEXT,
+    expired_url TEXT,
 
     expires_at TIMESTAMPTZ,
     paid_at TIMESTAMPTZ,
@@ -48,7 +54,9 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
         REFERENCES plans(id)
         ON DELETE RESTRICT,
 
-    CONSTRAINT checkout_sessions_amount_check CHECK (amount_cents >= 0),
+    CONSTRAINT checkout_sessions_amount_check CHECK (
+        amount_cents >= 0
+    ),
 
     CONSTRAINT checkout_sessions_status_check CHECK (
         status IN (
@@ -62,7 +70,6 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
 
     CONSTRAINT checkout_sessions_billing_type_check CHECK (
         billing_type IN (
-            'UNDEFINED',
             'BOLETO',
             'CREDIT_CARD',
             'PIX'
@@ -90,12 +97,7 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
     CONSTRAINT checkout_sessions_subscription_cycle_check CHECK (
         subscription_cycle IS NULL
         OR subscription_cycle IN (
-            'WEEKLY',
-            'BIWEEKLY',
             'MONTHLY',
-            'BIMONTHLY',
-            'QUARTERLY',
-            'SEMIANNUALLY',
             'YEARLY'
         )
     )

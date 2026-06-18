@@ -28,7 +28,6 @@ func (s *Service) checkoutMethods() CheckoutBillingTypes {
 			BillingTypePix:        s.RegisterPIXCheckoutSession,
 			BillingTypeBoleto:     s.RegisterBoletoCheckoutSession,
 			BillingTypeCreditCard: s.RegisterCreditCardCheckoutSession,
-			BillingTypeUndefined:  s.RegisterUndefinedCheckoutSession,
 		},
 	}
 }
@@ -87,9 +86,11 @@ func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, p
 	}
 
 	body := s.getPixPaymentLinkData(checkoutSession, plan)
+	log.Printf("BODY ASAAS PIX: %+v", body)
 
 	paymentResponse, err := s.Api.GettingPaymentLink(body)
 	if err != nil {
+		s.deleteCheckoutSessionAfterAsaasError(checkoutSession.ID)
 		return nil, err
 	}
 
@@ -114,6 +115,7 @@ func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, p
 	}, nil
 }
 func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	log.Print("PRIMEIRA APARIÇÃO DO END_DATE: ", input.EndDate)
 	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
 	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
 
@@ -131,6 +133,7 @@ func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionI
 
 	paymentResponse, err := s.Api.GettingPaymentLink(body)
 	if err != nil {
+		s.deleteCheckoutSessionAfterAsaasError(checkoutSession.ID)
 		return nil, err
 	}
 
@@ -151,14 +154,43 @@ func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionI
 	}, nil
 }
 
-//TODO BOLETO CHECKOUT E UNDEFEINED CHECKOUT e testar o credit card checkout session
-
 func (s *Service) RegisterBoletoCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
-	return nil, errors.New("checkout por boleto ainda não implementado")
-}
+	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
+	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
 
-func (s *Service) RegisterUndefinedCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
-	return nil, errors.New("checkout multiplo ainda não implementado")
+	checkoutSession, err := s.validateBoletoForBd(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	checkoutSession, err = s.Repository.CreateCheckoutSession(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	body := s.getBoletoPaymentLinkData(checkoutSession, plan)
+
+	paymentResponse, err := s.Api.GettingPaymentLink(body)
+	if err != nil {
+		s.deleteCheckoutSessionAfterAsaasError(checkoutSession.ID)
+		return nil, err
+	}
+
+	checkoutURL := paymentResponse.URL
+	checkoutSession.CheckoutURL = &checkoutURL
+
+	checkoutSession, err = s.Repository.UpdateCheckoutSession(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CheckoutSessionResponse{
+		CheckoutSessionID: checkoutSession.ID,
+		CheckoutURL:       paymentResponse.URL,
+		Status:            checkoutSession.Status,
+		Value:             plan.PriceCents,
+		Currency:          plan.Currency,
+	}, nil
 }
 
 // /////////////////////////////////////Validações///////////////////////////////////////////////////
@@ -176,8 +208,7 @@ func (s *Service) validateBillingType(billingType BillingType) error {
 	log.Print("O tipo de pagamento que esta vindo: ", billingType)
 	if billingType == BillingTypeBoleto ||
 		billingType == BillingTypeCreditCard ||
-		billingType == BillingTypePix ||
-		billingType == BillingTypeUndefined {
+		billingType == BillingTypePix {
 		return nil
 	}
 
@@ -192,6 +223,12 @@ func (s *Service) validateChargeType(chargeType ChargeType) error {
 	}
 
 	return errors.New("a frequência de pagamento não existe")
+}
+func (s *Service) deleteCheckoutSessionAfterAsaasError(checkoutSessionID string) {
+	err := s.Repository.DeleteCheckoutSessionByID(checkoutSessionID)
+	if err != nil {
+		log.Printf("erro ao apagar checkout session após falha no Asaas: %v", err)
+	}
 }
 
 func (s *Service) validateJWTContextID(input CreateCheckoutSessionInput) error {
@@ -231,7 +268,19 @@ func (s *Service) getPixPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *
 		BillingType:         ck.BillingType,
 		ChargeType:          ck.ChargeType,
 		ExternalReference:   ck.ID,
+		DueDateLimitDays:    int32Ptr(1),
 		NotificationEnabled: &ck.NotificationEnabled,
+	}
+}
+func (s *Service) getBoletoPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
+	return &CreatePaymentLink{
+		Name:                plan.Name,
+		Value:               float64(ck.AmountCents) / 100,
+		BillingType:         ck.BillingType,
+		ChargeType:          ck.ChargeType,
+		ExternalReference:   ck.ID,
+		NotificationEnabled: &ck.NotificationEnabled,
+		DueDateLimitDays:    ck.DueDateLimitDays,
 	}
 }
 
@@ -263,12 +312,35 @@ func (s *Service) getCreditCardPaymentLinkData(ck *CheckoutSession, plan *plans.
 
 func (s *Service) NormalizeCheckoutSessionData(input CreateCheckoutSessionInput, plan *plans.Plan) *CheckoutSession {
 	var endDate *time.Time
+	var subscriptionCycle *string
+
+	log.Printf("NormalizeCheckoutSessionData - input.EndDate recebido: '%s'", input.EndDate)
+	log.Printf("NormalizeCheckoutSessionData - input.SubscriptionCycle recebido: '%s'", input.SubscriptionCycle)
 
 	if input.EndDate != "" {
 		parsedEndDate, err := time.Parse("2006-01-02", input.EndDate)
-		if err == nil {
+		if err != nil {
+			log.Printf("NormalizeCheckoutSessionData - erro ao converter end_date: %v", err)
+		} else {
 			endDate = &parsedEndDate
+			log.Printf("NormalizeCheckoutSessionData - endDate convertido com sucesso: %v", parsedEndDate)
 		}
+	} else {
+		log.Println("NormalizeCheckoutSessionData - input.EndDate veio vazio")
+	}
+
+	if input.SubscriptionCycle != "" {
+		cycle := string(input.SubscriptionCycle)
+		subscriptionCycle = &cycle
+		log.Printf("NormalizeCheckoutSessionData - subscriptionCycle definido: %s", cycle)
+	} else {
+		log.Println("NormalizeCheckoutSessionData - subscriptionCycle ficará NULL")
+	}
+
+	if endDate == nil {
+		log.Println("NormalizeCheckoutSessionData - endDate final está NIL")
+	} else {
+		log.Printf("NormalizeCheckoutSessionData - endDate final: %v", *endDate)
 	}
 
 	return &CheckoutSession{
@@ -283,6 +355,7 @@ func (s *Service) NormalizeCheckoutSessionData(input CreateCheckoutSessionInput,
 		Currency:            plan.Currency,
 		DueDateLimitDays:    input.DueDateLimitDays,
 		MaxInstallmentCount: input.MaxInstallmentCount,
+		SubscriptionCycle:   subscriptionCycle,
 		EndDate:             endDate,
 		NotificationEnabled: false,
 	}
@@ -314,4 +387,8 @@ func (s *Service) validateNotificationsEnabled(notificationsEnabled bool) bool {
 		notificationsEnabled = false
 	}
 	return notificationsEnabled
+}
+
+func int32Ptr(value int32) *int32 {
+	return &value
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -36,7 +37,12 @@ func (a *APIClient) GettingPaymentLink(body *CreatePaymentLink) (*PaymentLinkRes
 	if err != nil {
 		return nil, err
 	}
+	bodyJSON, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		return nil, err
+	}
 
+	log.Println("JSON ENVIADO AO ASAAS:", string(bodyJSON))
 	url := "https://api-sandbox.asaas.com/v3/paymentLinks"
 
 	req, err := http.NewRequest(

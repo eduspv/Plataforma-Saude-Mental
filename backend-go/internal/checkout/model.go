@@ -35,7 +35,7 @@ type CheckoutSession struct {
 	ExternalReference *string
 	Description       *string
 
-	DueDateLimitDays    *int
+	DueDateLimitDays    *int32
 	MaxInstallmentCount *int
 	SubscriptionCycle   *string
 	EndDate             *time.Time

@@ -83,18 +83,11 @@ func (r *Repository) CreateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			max_installment_count,
 			subscription_cycle,
 			end_date,
-			notification_enabled,
-			is_address_required,
-			success_url,
-			cancel_url,
-			expired_url,
-			provider_request,
-			provider_response
+			notification_enabled
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9,
-			$10, $11, $12, $13, $14, $15, $16, $17,
-			$18, $19, $20, $21, $22
+			$1, $2, $3, $4, $5, $6, $7, $8,
+			$9, $10, $11, $12, $13, $14, $15, $16
 		)
 		RETURNING
 			id,
@@ -116,12 +109,6 @@ func (r *Repository) CreateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			subscription_cycle,
 			end_date,
 			notification_enabled,
-			is_address_required,
-			success_url,
-			cancel_url,
-			expired_url,
-			provider_request,
-			provider_response,
 			expires_at,
 			paid_at,
 			failed_at,
@@ -208,18 +195,12 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			subscription_cycle = $16,
 			end_date = $17,
 			notification_enabled = $18,
-			is_address_required = $19,
-			success_url = $20,
-			cancel_url = $21,
-			expired_url = $22,
-			provider_request = $23,
-			provider_response = $24,
-			expires_at = $25,
-			paid_at = $26,
-			failed_at = $27,
-			failure_reason = $28,
+			expires_at = $19,
+			paid_at = $20,
+			failed_at = $21,
+			failure_reason = $22,
 			updated_at = NOW()
-		WHERE id = $29
+		WHERE id = $23
 		RETURNING
 			id,
 			user_id,
@@ -240,12 +221,6 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			subscription_cycle,
 			end_date,
 			notification_enabled,
-			is_address_required,
-			success_url,
-			cancel_url,
-			expired_url,
-			provider_request,
-			provider_response,
 			expires_at,
 			paid_at,
 			failed_at,
@@ -339,4 +314,26 @@ func (r *Repository) CountPendingCheckoutSessionsByCompany(companyID string) (in
 	}
 
 	return count, nil
+}
+
+func (r *Repository) DeleteCheckoutSessionByID(checkoutSessionID string) error {
+	query := `
+		DELETE FROM checkout_sessions
+		WHERE id = $1
+	`
+
+	commandTag, err := r.DB.Exec(
+		context.Background(),
+		query,
+		checkoutSessionID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("checkout session não encontrada para exclusão")
+	}
+
+	return nil
 }

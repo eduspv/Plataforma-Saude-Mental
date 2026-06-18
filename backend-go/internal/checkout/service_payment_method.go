@@ -29,6 +29,29 @@ func (s *Service) validateCreditCardForBd(ck *CheckoutSession) (*CheckoutSession
 	return ck, nil
 }
 
+func (s *Service) validateBoletoForBd(ck *CheckoutSession) (*CheckoutSession, error) {
+	if ck.ChargeType != ChargeTypeDetached {
+		return nil, errors.New("o tipo de pagamento tem que ser detached")
+	}
+	if err := s.validateDueDateLimit(ck.DueDateLimitDays); err != nil {
+		return nil, err
+	}
+
+	if ck.MaxInstallmentCount != nil {
+		return nil, errors.New("boleto não deve possuir quantidade de parcelas")
+	}
+
+	if ck.SubscriptionCycle != nil {
+		return nil, errors.New("boleto avulso não deve possuir ciclo de assinatura")
+	}
+
+	if ck.NotificationEnabled != false {
+		ck.NotificationEnabled = false
+	}
+
+	return ck, nil
+}
+
 func (s *Service) validateCreditCardDetached(ck *CheckoutSession) error {
 	if ck.EndDate == nil {
 		return errors.New("a data de encerramento é obrigatória")
@@ -132,4 +155,14 @@ func isValidSubscriptionCycle(cycle string) bool {
 	default:
 		return false
 	}
+}
+
+func (s *Service) validateDueDateLimit(dueLimit *int32) error {
+	if dueLimit == nil {
+		return errors.New("o due date não pode ser nil")
+	}
+	if *dueLimit != 1 {
+		return errors.New("o boleto so pode ter 1 dia util para ser pago")
+	}
+	return nil
 }
