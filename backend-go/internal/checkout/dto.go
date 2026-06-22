@@ -64,52 +64,42 @@ const (
 	SubscriptionCycleYearly  SubscriptionCycle = "YEARLY"
 )
 
-// Payload enviado para o Asaas
-type CreatePaymentLink struct {
-	Name        string  `json:"name"`
-	Value       float64 `json:"value"`
-	Description string  `json:"description,omitempty"`
+// Payload enviado ao Asaas para criar um customer
+type CreateCustomerRequest struct {
+	Name    string `json:"name"`
+	CpfCnpj string `json:"cpfCnpj"`
+}
 
+// Resposta do Asaas ao criar um customer
+type CreateCustomerResponse struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	CpfCnpj string `json:"cpfCnpj"`
+}
+
+// Payload enviado ao Asaas para criar uma cobrança (/v3/payments)
+type CreatePaymentRequest struct {
+	Customer          string      `json:"customer"`
+	BillingType       BillingType `json:"billingType"`
+	Value             float64     `json:"value"`
+	DueDate           string      `json:"dueDate"`
+	ExternalReference string      `json:"externalReference,omitempty"`
+	Description       string      `json:"description,omitempty"`
+	// Parcelamento (somente CREDIT_CARD INSTALLMENT)
+	InstallmentCount *int     `json:"installmentCount,omitempty"`
+	TotalValue       *float64 `json:"totalValue,omitempty"`
+}
+
+// Resposta do Asaas ao criar uma cobrança
+type CreatePaymentResponse struct {
+	ID          string      `json:"id"`
+	Customer    string      `json:"customer"`
+	Status      string      `json:"status"`
 	BillingType BillingType `json:"billingType"`
-	ChargeType  ChargeType  `json:"chargeType"`
-
-	ExternalReference string `json:"externalReference,omitempty"`
-
-	DueDateLimitDays    *int32            `json:"dueDateLimitDays,omitempty"`
-	MaxInstallmentCount *int              `json:"maxInstallmentCount,omitempty"`
-	SubscriptionCycle   SubscriptionCycle `json:"subscriptionCycle,omitempty"`
-
-	EndDate string `json:"endDate,omitempty"`
-
-	NotificationEnabled *bool `json:"notificationEnabled,omitempty"`
-	IsAddressRequired   *bool `json:"isAddressRequired,omitempty"`
-}
-
-// Resposta de criação/listagem de link do Asaas
-type PaymentLinkResponse struct {
-	ID                  string            `json:"id"`
-	Name                string            `json:"name"`
-	Value               float64           `json:"value"`
-	Active              bool              `json:"active"`
-	ChargeType          ChargeType        `json:"chargeType"`
-	URL                 string            `json:"url"`
-	BillingType         BillingType       `json:"billingType"`
-	SubscriptionCycle   SubscriptionCycle `json:"subscriptionCycle"`
-	EndDate             string            `json:"endDate"`
-	MaxInstallmentCount int               `json:"maxInstallmentCount"`
-	DueDateLimitDays    int               `json:"dueDateLimitDays"`
-	NotificationEnabled bool              `json:"notificationEnabled"`
-	ExternalReference   string            `json:"externalReference"`
-}
-
-// Resposta da listagem de links do Asaas
-type PaymentLinksListResponse struct {
-	Object     string                `json:"object"`
-	HasMore    bool                  `json:"hasMore"`
-	TotalCount int                   `json:"totalCount"`
-	Limit      int                   `json:"limit"`
-	Offset     int                   `json:"offset"`
-	Data       []PaymentLinkResponse `json:"data"`
+	Value       float64     `json:"value"`
+	DueDate     string      `json:"dueDate"`
+	InvoiceURL  string      `json:"invoiceUrl"`
+	BankSlipURL string      `json:"bankSlipUrl"`
 }
 
 // Resposta que sua API devolve para o front

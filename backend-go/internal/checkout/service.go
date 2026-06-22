@@ -1,6 +1,7 @@
 package checkout
 
 import (
+	"backend-go/internal/companies"
 	"backend-go/internal/plans"
 	"backend-go/internal/users"
 	"errors"
@@ -11,14 +12,16 @@ import (
 )
 
 type Service struct {
-	Repository *Repository
-	Api        *APIClient
+	Repository    *Repository
+	CompaniesRepo *companies.Repository
+	Api           *APIClient
 }
 
-func NewService(repository *Repository, api *APIClient) *Service {
+func NewService(repository *Repository, companiesRepo *companies.Repository, api *APIClient) *Service {
 	return &Service{
-		Repository: repository,
-		Api:        api,
+		Repository:    repository,
+		CompaniesRepo: companiesRepo,
+		Api:           api,
 	}
 }
 
@@ -77,29 +80,32 @@ func (s *Service) RegisterCheckoutSession(input CreateCheckoutSessionInput) (*Ch
 }
 
 func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
-	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
-	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
-
-	checkoutSession, err := s.Repository.CreateCheckoutSession(checkoutSession)
+	customerID, err := s.ensureAsaasCustomer(input.Auth.CompanyID)
 	if err != nil {
 		return nil, err
 	}
 
-	body := s.getPixPaymentLinkData(checkoutSession, plan)
+	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
+	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
+
+	checkoutSession, err = s.Repository.CreateCheckoutSession(checkoutSession)
+	if err != nil {
+		return nil, err
+	}
+
+	body := s.getPixPaymentData(checkoutSession, customerID)
 	log.Printf("BODY ASAAS PIX: %+v", body)
 
-	paymentResponse, err := s.Api.GettingPaymentLink(body)
+	paymentResponse, err := s.Api.CreatePayment(body)
 	if err != nil {
 		s.deleteCheckoutSessionAfterAsaasError(checkoutSession.ID)
 		return nil, err
 	}
 
-	checkoutURL := paymentResponse.URL
+	checkoutURL := paymentResponse.InvoiceURL
+	providerSessionID := paymentResponse.ID
 	checkoutSession.CheckoutURL = &checkoutURL
-
-	// Se sua resposta do Asaas tiver ID, use isso:
-	// providerSessionID := paymentResponse.ID
-	// checkoutSession.ProviderSessionID = &providerSessionID
+	checkoutSession.ProviderSessionID = &providerSessionID
 
 	checkoutSession, err = s.Repository.UpdateCheckoutSession(checkoutSession)
 	if err != nil {
@@ -108,18 +114,23 @@ func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, p
 
 	return &CheckoutSessionResponse{
 		CheckoutSessionID: checkoutSession.ID,
-		CheckoutURL:       paymentResponse.URL,
+		CheckoutURL:       paymentResponse.InvoiceURL,
 		Status:            checkoutSession.Status,
 		Value:             plan.PriceCents,
 		Currency:          plan.Currency,
 	}, nil
 }
 func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	customerID, err := s.ensureAsaasCustomer(input.Auth.CompanyID)
+	if err != nil {
+		return nil, err
+	}
+
 	log.Print("PRIMEIRA APARIÇÃO DO END_DATE: ", input.EndDate)
 	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
 	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
 
-	checkoutSession, err := s.validateCreditCardForBd(checkoutSession)
+	checkoutSession, err = s.validateCreditCardForBd(checkoutSession)
 	if err != nil {
 		return nil, err
 	}
@@ -129,16 +140,18 @@ func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionI
 		return nil, err
 	}
 
-	body := s.getCreditCardPaymentLinkData(checkoutSession, plan)
+	body := s.getCreditCardPaymentData(checkoutSession, customerID)
 
-	paymentResponse, err := s.Api.GettingPaymentLink(body)
+	paymentResponse, err := s.Api.CreatePayment(body)
 	if err != nil {
 		s.deleteCheckoutSessionAfterAsaasError(checkoutSession.ID)
 		return nil, err
 	}
 
-	checkoutURL := paymentResponse.URL
+	checkoutURL := paymentResponse.InvoiceURL
+	providerSessionID := paymentResponse.ID
 	checkoutSession.CheckoutURL = &checkoutURL
+	checkoutSession.ProviderSessionID = &providerSessionID
 
 	checkoutSession, err = s.Repository.UpdateCheckoutSession(checkoutSession)
 	if err != nil {
@@ -147,7 +160,7 @@ func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionI
 
 	return &CheckoutSessionResponse{
 		CheckoutSessionID: checkoutSession.ID,
-		CheckoutURL:       paymentResponse.URL,
+		CheckoutURL:       paymentResponse.InvoiceURL,
 		Status:            checkoutSession.Status,
 		Value:             plan.PriceCents,
 		Currency:          plan.Currency,
@@ -155,10 +168,15 @@ func (s *Service) RegisterCreditCardCheckoutSession(input CreateCheckoutSessionI
 }
 
 func (s *Service) RegisterBoletoCheckoutSession(input CreateCheckoutSessionInput, plan *plans.Plan) (*CheckoutSessionResponse, error) {
+	customerID, err := s.ensureAsaasCustomer(input.Auth.CompanyID)
+	if err != nil {
+		return nil, err
+	}
+
 	checkoutSession := s.NormalizeCheckoutSessionData(input, plan)
 	checkoutSession.NotificationEnabled = s.validateNotificationsEnabled(checkoutSession.NotificationEnabled)
 
-	checkoutSession, err := s.validateBoletoForBd(checkoutSession)
+	checkoutSession, err = s.validateBoletoForBd(checkoutSession)
 	if err != nil {
 		return nil, err
 	}
@@ -168,16 +186,18 @@ func (s *Service) RegisterBoletoCheckoutSession(input CreateCheckoutSessionInput
 		return nil, err
 	}
 
-	body := s.getBoletoPaymentLinkData(checkoutSession, plan)
+	body := s.getBoletoPaymentData(checkoutSession, customerID)
 
-	paymentResponse, err := s.Api.GettingPaymentLink(body)
+	paymentResponse, err := s.Api.CreatePayment(body)
 	if err != nil {
 		s.deleteCheckoutSessionAfterAsaasError(checkoutSession.ID)
 		return nil, err
 	}
 
-	checkoutURL := paymentResponse.URL
+	checkoutURL := paymentResponse.InvoiceURL
+	providerSessionID := paymentResponse.ID
 	checkoutSession.CheckoutURL = &checkoutURL
+	checkoutSession.ProviderSessionID = &providerSessionID
 
 	checkoutSession, err = s.Repository.UpdateCheckoutSession(checkoutSession)
 	if err != nil {
@@ -186,7 +206,7 @@ func (s *Service) RegisterBoletoCheckoutSession(input CreateCheckoutSessionInput
 
 	return &CheckoutSessionResponse{
 		CheckoutSessionID: checkoutSession.ID,
-		CheckoutURL:       paymentResponse.URL,
+		CheckoutURL:       paymentResponse.InvoiceURL,
 		Status:            checkoutSession.Status,
 		Value:             plan.PriceCents,
 		Currency:          plan.Currency,
@@ -261,53 +281,88 @@ func (s *Service) validateUserCanStartCheckout(status string) error {
 	return errors.New("usuário não pode iniciar checkout nesse status")
 }
 
-func (s *Service) getPixPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
-	return &CreatePaymentLink{
-		Name:                plan.Name,
-		Value:               float64(ck.AmountCents) / 100,
-		BillingType:         ck.BillingType,
-		ChargeType:          ck.ChargeType,
-		ExternalReference:   ck.ID,
-		DueDateLimitDays:    int32Ptr(1),
-		NotificationEnabled: &ck.NotificationEnabled,
+// ensureAsaasCustomer retorna o asaas_customer_id existente da company ou cria um novo.
+// ATENÇÃO: asaas_customer_id é específico do ambiente (sandbox vs produção).
+// Na virada para produção, execute: UPDATE companies SET asaas_customer_id = NULL;
+func (s *Service) ensureAsaasCustomer(companyID string) (string, error) {
+	company, err := s.CompaniesRepo.GetCompanyByID(companyID)
+	if err != nil {
+		return "", err
 	}
+
+	if company.CNPJ == "" {
+		return "", errors.New("company sem CNPJ não pode gerar cobrança")
+	}
+
+	if company.AsaasCustomerID != nil && *company.AsaasCustomerID != "" {
+		log.Printf("[CHECKOUT] reusando customer Asaas company_id=%s customer_id=%s", companyID, *company.AsaasCustomerID)
+		return *company.AsaasCustomerID, nil
+	}
+
+	log.Printf("[CHECKOUT] criando customer no Asaas para company_id=%s", companyID)
+	customerResp, err := s.Api.CreateCustomer(&CreateCustomerRequest{
+		Name:    company.Name,
+		CpfCnpj: company.CNPJ,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.CompaniesRepo.UpdateAsaasCustomerID(companyID, customerResp.ID); err != nil {
+		return "", err
+	}
+
+	log.Printf("[CHECKOUT] customer criado e salvo company_id=%s customer_id=%s", companyID, customerResp.ID)
+	return customerResp.ID, nil
 }
-func (s *Service) getBoletoPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
-	return &CreatePaymentLink{
-		Name:                plan.Name,
-		Value:               float64(ck.AmountCents) / 100,
-		BillingType:         ck.BillingType,
-		ChargeType:          ck.ChargeType,
-		ExternalReference:   ck.ID,
-		NotificationEnabled: &ck.NotificationEnabled,
-		DueDateLimitDays:    ck.DueDateLimitDays,
+
+func (s *Service) getPixPaymentData(ck *CheckoutSession, customerID string) *CreatePaymentRequest {
+	dueDate := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	return &CreatePaymentRequest{
+		Customer:          customerID,
+		BillingType:       ck.BillingType,
+		Value:             float64(ck.AmountCents) / 100,
+		DueDate:           dueDate,
+		ExternalReference: ck.ID,
 	}
 }
 
-func (s *Service) getCreditCardPaymentLinkData(ck *CheckoutSession, plan *plans.Plan) *CreatePaymentLink {
-	endDate := ""
+func (s *Service) getBoletoPaymentData(ck *CheckoutSession, customerID string) *CreatePaymentRequest {
+	days := 1
+	if ck.DueDateLimitDays != nil {
+		days = int(*ck.DueDateLimitDays)
+	}
+	dueDate := time.Now().AddDate(0, 0, days).Format("2006-01-02")
+	return &CreatePaymentRequest{
+		Customer:          customerID,
+		BillingType:       ck.BillingType,
+		Value:             float64(ck.AmountCents) / 100,
+		DueDate:           dueDate,
+		ExternalReference: ck.ID,
+	}
+}
+
+func (s *Service) getCreditCardPaymentData(ck *CheckoutSession, customerID string) *CreatePaymentRequest {
+	dueDate := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
 	if ck.EndDate != nil {
-		endDate = ck.EndDate.Format("2006-01-02")
+		dueDate = ck.EndDate.Format("2006-01-02")
 	}
 
-	var subscriptionCycle SubscriptionCycle
-	if ck.SubscriptionCycle != nil {
-		subscriptionCycle = SubscriptionCycle(*ck.SubscriptionCycle)
+	req := &CreatePaymentRequest{
+		Customer:          customerID,
+		BillingType:       ck.BillingType,
+		Value:             float64(ck.AmountCents) / 100,
+		DueDate:           dueDate,
+		ExternalReference: ck.ID,
 	}
 
-	return &CreatePaymentLink{
-		Name:                plan.Name,
-		Value:               float64(ck.AmountCents) / 100,
-		BillingType:         ck.BillingType,
-		ChargeType:          ck.ChargeType,
-		ExternalReference:   ck.ID,
-		NotificationEnabled: &ck.NotificationEnabled,
-
-		EndDate:             endDate,
-		SubscriptionCycle:   subscriptionCycle,
-		MaxInstallmentCount: ck.MaxInstallmentCount,
-		DueDateLimitDays:    ck.DueDateLimitDays,
+	if ck.ChargeType == ChargeTypeInstallment && ck.MaxInstallmentCount != nil {
+		total := float64(ck.AmountCents) / 100 * float64(*ck.MaxInstallmentCount)
+		req.InstallmentCount = ck.MaxInstallmentCount
+		req.TotalValue = &total
 	}
+
+	return req
 }
 
 func (s *Service) NormalizeCheckoutSessionData(input CreateCheckoutSessionInput, plan *plans.Plan) *CheckoutSession {
@@ -387,8 +442,4 @@ func (s *Service) validateNotificationsEnabled(notificationsEnabled bool) bool {
 		notificationsEnabled = false
 	}
 	return notificationsEnabled
-}
-
-func int32Ptr(value int32) *int32 {
-	return &value
 }

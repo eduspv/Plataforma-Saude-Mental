@@ -10,7 +10,8 @@ type Routes struct {
 }
 
 func NewRoutes(db *pgxpool.Pool, webhookToken string) *Routes {
-	service := NewService(db)
+	repo := NewRepository(db)
+	service := NewService(db, repo)
 	handler := NewHandler(service, webhookToken)
 	return &Routes{Handler: handler}
 }

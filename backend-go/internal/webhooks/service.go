@@ -1,7 +1,6 @@
 package webhooks
 
 import (
-	"context"
 	"errors"
 	"log"
 
@@ -10,66 +9,58 @@ import (
 )
 
 type Service struct {
-	DB *pgxpool.Pool
+	Repo *Repository
 }
 
-func NewService(db *pgxpool.Pool) *Service {
-	return &Service{DB: db}
+func NewService(db *pgxpool.Pool, repo *Repository) *Service {
+	return &Service{Repo: repo}
 }
 
 func (s *Service) HandleEvent(payload AsaasWebhookEvent) error {
 	checkoutSessionID := payload.Payment.ExternalReference
+	log.Printf("[SERVICE] HandleEvent chamado: event=%s checkout_session_id=%q", payload.Event, checkoutSessionID)
+
 	if checkoutSessionID == "" {
-		log.Printf("webhook Asaas: externalReference vazio event=%s", payload.Event)
+		log.Printf("[SERVICE] externalReference vazio — ignorando evento event=%s", payload.Event)
 		return nil
 	}
 
 	switch payload.Event {
 	case "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED":
+		log.Printf("[SERVICE] encaminhando para handlePaymentPaid event=%s checkout_session_id=%s value=%s", payload.Event, checkoutSessionID, payload.Payment.Value)
 		return s.handlePaymentPaid(payload.Event, checkoutSessionID, string(payload.Payment.Value))
 	case "PAYMENT_OVERDUE":
-		return s.handlePaymentOverdue(checkoutSessionID)
+		log.Printf("[SERVICE] marcando sessão como expirada checkout_session_id=%s", checkoutSessionID)
+		return s.Repo.MarkSessionExpired(checkoutSessionID)
 	case "PAYMENT_DELETED":
-		return s.handlePaymentDeleted(checkoutSessionID)
+		log.Printf("[SERVICE] marcando sessão como cancelada (excludePaid=true) checkout_session_id=%s", checkoutSessionID)
+		return s.Repo.MarkSessionCancelled(checkoutSessionID, true)
 	case "PAYMENT_REFUNDED":
-		return s.handlePaymentRefunded(checkoutSessionID)
+		log.Printf("[SERVICE] marcando sessão como cancelada (excludePaid=false) checkout_session_id=%s", checkoutSessionID)
+		return s.Repo.MarkSessionCancelled(checkoutSessionID, false)
 	default:
-		log.Printf("webhook Asaas: evento ignorado event=%s checkout_session_id=%s", payload.Event, checkoutSessionID)
+		log.Printf("[SERVICE] evento ignorado (não mapeado): event=%s checkout_session_id=%s", payload.Event, checkoutSessionID)
 		return nil
 	}
 }
 
 func (s *Service) handlePaymentPaid(event, checkoutSessionID, valueStr string) error {
-	query := `
-		UPDATE checkout_sessions
-		SET status = 'paid',
-		    paid_at = COALESCE(paid_at, NOW()),
-		    updated_at = NOW()
-		WHERE id = $1
-		  AND amount_cents = ROUND($2::numeric * 100)::integer
-		  AND status <> 'paid'
-	`
-	tag, err := s.DB.Exec(context.Background(), query, checkoutSessionID, valueStr)
+	log.Printf("[SERVICE] handlePaymentPaid: event=%s checkout_session_id=%s value=%q", event, checkoutSessionID, valueStr)
+	rowsAffected, err := s.Repo.MarkSessionPaid(event, checkoutSessionID, valueStr)
 	if err != nil {
-		log.Printf("webhook Asaas: erro ao atualizar status event=%s checkout_session_id=%s", event, checkoutSessionID)
+		log.Printf("[SERVICE] ERRO em MarkSessionPaid: %v", err)
 		return err
 	}
-
-	if tag.RowsAffected() == 0 {
+	log.Printf("[SERVICE] MarkSessionPaid concluído: rowsAffected=%d checkout_session_id=%s", rowsAffected, checkoutSessionID)
+	if rowsAffected == 0 {
+		log.Printf("[SERVICE] 0 linhas afetadas — iniciando diagnóstico checkout_session_id=%s", checkoutSessionID)
 		s.diagnosePaidNoOp(event, checkoutSessionID)
 	}
-
 	return nil
 }
 
 func (s *Service) diagnosePaidNoOp(event, checkoutSessionID string) {
-	var status string
-	err := s.DB.QueryRow(
-		context.Background(),
-		`SELECT status FROM checkout_sessions WHERE id = $1`,
-		checkoutSessionID,
-	).Scan(&status)
-
+	status, err := s.Repo.GetSessionStatus(checkoutSessionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Printf("webhook Asaas: sessão não encontrada event=%s checkout_session_id=%s", event, checkoutSessionID)
@@ -84,52 +75,5 @@ func (s *Service) diagnosePaidNoOp(event, checkoutSessionID string) {
 		return
 	}
 
-	log.Printf("webhook Asaas: value mismatch event=%s checkout_session_id=%s", event, checkoutSessionID)
-}
-
-func (s *Service) handlePaymentOverdue(checkoutSessionID string) error {
-	query := `
-		UPDATE checkout_sessions
-		SET status = 'expired',
-		    updated_at = NOW()
-		WHERE id = $1
-		  AND status NOT IN ('paid', 'cancelled')
-	`
-	_, err := s.DB.Exec(context.Background(), query, checkoutSessionID)
-	if err != nil {
-		log.Printf("webhook Asaas: erro ao atualizar status event=PAYMENT_OVERDUE checkout_session_id=%s", checkoutSessionID)
-		return err
-	}
-	return nil
-}
-
-func (s *Service) handlePaymentDeleted(checkoutSessionID string) error {
-	query := `
-		UPDATE checkout_sessions
-		SET status = 'cancelled',
-		    updated_at = NOW()
-		WHERE id = $1
-		  AND status <> 'paid'
-	`
-	_, err := s.DB.Exec(context.Background(), query, checkoutSessionID)
-	if err != nil {
-		log.Printf("webhook Asaas: erro ao atualizar status event=PAYMENT_DELETED checkout_session_id=%s", checkoutSessionID)
-		return err
-	}
-	return nil
-}
-
-func (s *Service) handlePaymentRefunded(checkoutSessionID string) error {
-	query := `
-		UPDATE checkout_sessions
-		SET status = 'cancelled',
-		    updated_at = NOW()
-		WHERE id = $1
-	`
-	_, err := s.DB.Exec(context.Background(), query, checkoutSessionID)
-	if err != nil {
-		log.Printf("webhook Asaas: erro ao atualizar status event=PAYMENT_REFUNDED checkout_session_id=%s", checkoutSessionID)
-		return err
-	}
-	return nil
+	log.Printf("webhook Asaas: value mismatch event=%s checkout_session_id=%s status=%s", event, checkoutSessionID, status)
 }

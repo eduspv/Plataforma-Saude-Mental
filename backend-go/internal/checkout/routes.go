@@ -1,6 +1,8 @@
 package checkout
 
 import (
+	"backend-go/internal/companies"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -11,9 +13,10 @@ type Routes struct {
 
 func NewRoutes(db *pgxpool.Pool, APIKey string) *Routes {
 	repository := NewRepository(db)
+	companiesRepo := companies.NewRepository(db)
 	api := NewAPIClient(APIKey)
 
-	service := NewService(repository, api)
+	service := NewService(repository, companiesRepo, api)
 	handler := NewHandler(service)
 
 	return &Routes{

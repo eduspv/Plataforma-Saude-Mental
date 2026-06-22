@@ -11,12 +11,13 @@ const (
 )
 
 type Company struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	CNPJ           string    `json:"cnpj"`
-	CorporateEmail string    `json:"corporate_email"`
-	Phone          string    `json:"phone"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	CNPJ            string    `json:"cnpj"`
+	CorporateEmail  string    `json:"corporate_email"`
+	Phone           string    `json:"phone"`
+	Status          string    `json:"status"`
+	AsaasCustomerID *string   `json:"asaas_customer_id"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }

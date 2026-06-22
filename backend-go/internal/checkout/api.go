@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -20,43 +18,29 @@ type APIClient struct {
 
 func NewAPIClient(apiKey string) *APIClient {
 	return &APIClient{
-		HTTPClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		APIKey: apiKey,
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		APIKey:     apiKey,
 	}
 }
 
-func (a *APIClient) GettingPaymentLink(body *CreatePaymentLink) (*PaymentLinkResponse, error) {
+func (a *APIClient) CreateCustomer(body *CreateCustomerRequest) (*CreateCustomerResponse, error) {
 	if body == nil {
-		return nil, errors.New("dados do link de pagamento não informados")
+		return nil, errors.New("dados do cliente não informados")
 	}
-	var paymentLinkResponse PaymentLinkResponse
 
 	payloadBytes, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	bodyJSON, err := json.MarshalIndent(body, "", "  ")
-	if err != nil {
-		return nil, err
-	}
 
-	log.Println("JSON ENVIADO AO ASAAS:", string(bodyJSON))
-	url := "https://api-sandbox.asaas.com/v3/paymentLinks"
-
-	req, err := http.NewRequest(
-		http.MethodPost,
-		url,
-		bytes.NewBuffer(payloadBytes),
-	)
+	req, err := http.NewRequest(http.MethodPost, "https://api-sandbox.asaas.com/v3/customers", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return nil, err
 	}
 
 	req.Header.Add("accept", "application/json")
-	req.Header.Add("User-Agent", "SaudeMentalBackend/1.0.0")
 	req.Header.Add("content-type", "application/json")
+	req.Header.Add("User-Agent", "SaudeMentalBackend/1.0.0")
 	req.Header.Add("access_token", a.APIKey)
 
 	resp, err := a.HTTPClient.Do(req)
@@ -71,85 +55,74 @@ func (a *APIClient) GettingPaymentLink(body *CreatePaymentLink) (*PaymentLinkRes
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("erro ao criar link no Asaas: status %d - %s", resp.StatusCode, string(responseBody))
+		return nil, fmt.Errorf("erro ao criar customer no Asaas: status %d - %s", resp.StatusCode, string(responseBody))
 	}
 
-	if err := json.Unmarshal(responseBody, &paymentLinkResponse); err != nil {
+	var customerResponse CreateCustomerResponse
+	if err := json.Unmarshal(responseBody, &customerResponse); err != nil {
 		return nil, err
 	}
 
-	if err := a.ValidateLinkResponse(&paymentLinkResponse, body); err != nil {
-		return nil, err
+	if customerResponse.ID == "" {
+		return nil, errors.New("Asaas não retornou ID do customer")
 	}
 
-	return &paymentLinkResponse, nil
+	return &customerResponse, nil
 }
 
-func (a *APIClient) GetAllPaymentsLinks(extRef string) (*PaymentLinksListResponse, error) {
-	baseURL := "https://api-sandbox.asaas.com/v3/paymentLinks"
+func (a *APIClient) CreatePayment(body *CreatePaymentRequest) (*CreatePaymentResponse, error) {
+	if body == nil {
+		return nil, errors.New("dados da cobrança não informados")
+	}
 
-	u, err := url.Parse(baseURL)
+	payloadBytes, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 
-	query := u.Query()
-	query.Set("externalReference", extRef)
-	u.RawQuery = query.Encode()
+	bodyJSON, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	log.Println("JSON ENVIADO AO ASAAS:", string(bodyJSON))
 
-	resp, err := a.HTTPClient.Get(u.String())
+	req, err := http.NewRequest(http.MethodPost, "https://api-sandbox.asaas.com/v3/payments", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("content-type", "application/json")
+	req.Header.Add("User-Agent", "SaudeMentalBackend/1.0.0")
+	req.Header.Add("access_token", a.APIKey)
+
+	resp, err := a.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	bodyReq, err := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	var paymentResponse PaymentLinksListResponse
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("erro ao criar cobrança no Asaas: status %d - %s", resp.StatusCode, string(responseBody))
+	}
 
-	err = json.Unmarshal(bodyReq, &paymentResponse)
-	if err != nil {
+	var paymentResponse CreatePaymentResponse
+	if err := json.Unmarshal(responseBody, &paymentResponse); err != nil {
 		return nil, err
+	}
+
+	if paymentResponse.ID == "" {
+		return nil, errors.New("Asaas não retornou ID da cobrança")
+	}
+
+	if paymentResponse.InvoiceURL == "" {
+		return nil, errors.New("Asaas não retornou URL da cobrança")
 	}
 
 	return &paymentResponse, nil
-}
-
-func (a *APIClient) ValidateLinkResponse(payLinkRes *PaymentLinkResponse, request *CreatePaymentLink) error {
-	if payLinkRes == nil {
-		return errors.New("o Asaas não enviou resposta")
-	}
-
-	if payLinkRes.ID == "" {
-		return errors.New("o Asaas não enviou o ID do link de pagamento")
-	}
-
-	if payLinkRes.URL == "" {
-		return errors.New("o Asaas não enviou o link de pagamento")
-	}
-
-	if request == nil {
-		return nil
-	}
-
-	if payLinkRes.Name != request.Name {
-		return errors.New("o nome retornado pelo Asaas é diferente do nome enviado")
-	}
-
-	if math.Abs(payLinkRes.Value-request.Value) > 0.001 {
-		return errors.New("o valor retornado pelo Asaas é diferente do valor enviado")
-	}
-
-	if payLinkRes.BillingType != request.BillingType {
-		return errors.New("o tipo de pagamento retornado pelo Asaas é diferente do enviado")
-	}
-
-	if payLinkRes.ChargeType != request.ChargeType {
-		return errors.New("o tipo de cobrança retornado pelo Asaas é diferente do enviado")
-	}
-
-	return nil
 }
