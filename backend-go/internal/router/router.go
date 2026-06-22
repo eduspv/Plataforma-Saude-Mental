@@ -6,15 +6,17 @@ import (
 	"backend-go/internal/auth"
 	"backend-go/internal/checkout"
 	"backend-go/internal/middleware"
+	"backend-go/internal/webhooks"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func SetupRouter(db *pgxpool.Pool, jwtSecret string, APIKey string) *gin.Engine {
+func SetupRouter(db *pgxpool.Pool, jwtSecret string, APIKey string, webhookToken string) *gin.Engine {
 	log.Println("[ROUTER] Iniciando setup das rotas")
 	log.Println("[ROUTER] JWT_SECRET recebido?", jwtSecret != "")
 	log.Println("[ROUTER] ASAAS_API_KEY recebida?", APIKey != "")
+	log.Println("[ROUTER] ASAAS_WEBHOOK_TOKEN recebido?", webhookToken != "")
 
 	r := gin.Default()
 
@@ -35,6 +37,10 @@ func SetupRouter(db *pgxpool.Pool, jwtSecret string, APIKey string) *gin.Engine 
 	log.Println("[ROUTER] Registrando rotas públicas de auth")
 	authRoutes := auth.NewRoutes(db, jwtSecret)
 	authRoutes.RegisterRoutes(api)
+
+	log.Println("[ROUTER] Registrando rotas públicas de webhook")
+	webhookRoutes := webhooks.NewRoutes(db, webhookToken)
+	webhookRoutes.RegisterRoutes(api)
 
 	log.Println("[ROUTER] Registrando grupo de rotas protegidas")
 	protected := api.Group("/")

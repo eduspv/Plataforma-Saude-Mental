@@ -13,8 +13,9 @@ type Config struct {
 	DatabaseURL string
 	JWTSecret   string
 
-	ASAASBaseURL string
-	ASAASAPIKey  string
+	ASAASBaseURL      string
+	ASAASAPIKey       string
+	ASAASWebhookToken string
 }
 
 func LoadConfig() *Config {
@@ -29,8 +30,9 @@ func LoadConfig() *Config {
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		JWTSecret:   getEnv("JWT_SECRET", ""),
 
-		ASAASBaseURL: getEnv("ASAAS_BASE_URL", "https://api-sandbox.asaas.com/v3"),
-		ASAASAPIKey:  getEnv("ASAAS_API_KEY", ""),
+		ASAASBaseURL:      getEnv("ASAAS_BASE_URL", "https://api-sandbox.asaas.com/v3"),
+		ASAASAPIKey:       getEnv("ASAAS_API_KEY", ""),
+		ASAASWebhookToken: getEnv("ASAAS_WEBHOOK_TOKEN", ""),
 	}
 }
 

@@ -26,7 +26,8 @@ type CreateCheckoutSessionInput struct {
 	PlanID      string
 	BillingType BillingType
 	ChargeType  ChargeType
-	Auth        AuthContext
+
+	Auth AuthContext
 
 	DueDateLimitDays    *int32
 	MaxInstallmentCount *int
