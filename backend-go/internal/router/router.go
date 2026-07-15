@@ -6,6 +6,7 @@ import (
 	"backend-go/internal/auth"
 	"backend-go/internal/checkout"
 	"backend-go/internal/middleware"
+	"backend-go/internal/users"
 	"backend-go/internal/webhooks"
 
 	"github.com/gin-gonic/gin"
@@ -42,15 +43,25 @@ func SetupRouter(db *pgxpool.Pool, jwtSecret string, APIKey string, webhookToken
 	webhookRoutes := webhooks.NewRoutes(db, webhookToken)
 	webhookRoutes.RegisterRoutes(api)
 
-	log.Println("[ROUTER] Registrando grupo de rotas protegidas")
+	log.Println("[ROUTER] Registrando grupo de rotas protegidas (só auth)")
 	protected := api.Group("/")
 	protected.Use(middleware.AuthMiddleware(jwtSecret))
 
+	log.Println("[ROUTER] Registrando grupo protegido por plano (auth + plan)")
+	protectedByPlan := protected.Group("/")
+	protectedByPlan.Use(middleware.RequireActivePlan(db))
+
+	// Rotas que só exigem estar logado (mesmo sem plano ativo)
+	// Ex.: checkout — cliente com plano vencido precisa poder pagar de novo
 	log.Println("[ROUTER] Registrando rotas protegidas de checkout")
 	checkoutRoutes := checkout.NewRoutes(db, APIKey)
 	checkoutRoutes.RegisterRoutes(protected)
 
-	log.Println("[ROUTER] Setup das rotas concluído")
+	// Rotas que exigem plano ativo
+	log.Println("[ROUTER] Registrando rotas de users (exige plano ativo)")
+	userRoutes := users.NewRoutes(db)
+	userRoutes.RegisterRoutes(protectedByPlan) // ← só um grupo
 
+	log.Println("[ROUTER] Setup das rotas concluído")
 	return r
 }

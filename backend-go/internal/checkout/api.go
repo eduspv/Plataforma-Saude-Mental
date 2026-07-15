@@ -43,6 +43,9 @@ func (a *APIClient) CreateCustomer(body *CreateCustomerRequest) (*CreateCustomer
 	req.Header.Add("User-Agent", "SaudeMentalBackend/1.0.0")
 	req.Header.Add("access_token", a.APIKey)
 
+	log.Printf("[DEBUG_ASAAS] URL=%s", req.URL.String())
+	log.Printf("[DEBUG_ASAAS] header access_token len=%d prefix=%q", len(req.Header.Get("access_token")), req.Header.Get("access_token")[:min(30, len(req.Header.Get("access_token")))])
+
 	resp, err := a.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err

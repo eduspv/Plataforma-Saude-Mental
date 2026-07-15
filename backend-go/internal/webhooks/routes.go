@@ -1,6 +1,9 @@
 package webhooks
 
 import (
+	"backend-go/internal/plans"
+	"backend-go/internal/subscriptions"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -10,8 +13,11 @@ type Routes struct {
 }
 
 func NewRoutes(db *pgxpool.Pool, webhookToken string) *Routes {
+	plansRepo := plans.NewRepository(db)
+	subsRepo := subscriptions.NewRepository(db)
+	subsService := subscriptions.NewService(subsRepo, plansRepo)
 	repo := NewRepository(db)
-	service := NewService(db, repo)
+	service := NewService(db, repo, subsService)
 	handler := NewHandler(service, webhookToken)
 	return &Routes{Handler: handler}
 }
