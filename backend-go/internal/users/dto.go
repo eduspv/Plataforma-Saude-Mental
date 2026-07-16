@@ -22,7 +22,7 @@ type UserInput struct {
 }
 
 type NewEmployeeResponse struct {
-	Name     string
-	Email    string
-	Password string
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	//Password string `json:"password"` TODO: pos mvp enviar a senha em momentos importantes por enquanto vamos gravar no front e deixar essa senha lá
 }

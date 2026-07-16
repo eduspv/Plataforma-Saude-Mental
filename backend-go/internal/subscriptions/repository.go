@@ -3,6 +3,7 @@ package subscriptions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +16,33 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{DB: db}
+}
+
+func (r *Repository) GetPlanIDFromCompanyID(companyID string) (string, error) {
+	var planID string
+
+	const query = `
+		SELECT plan_id
+		FROM subscriptions
+		WHERE company_id = $1
+		  AND status = 'active'
+	`
+
+	err := r.DB.QueryRow(
+		context.Background(),
+		query,
+		companyID,
+	).Scan(&planID)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", errors.New("a empresa não possui uma assinatura ativa")
+		}
+
+		return "", fmt.Errorf("erro ao buscar plano da empresa: %w", err)
+	}
+
+	return planID, nil
 }
 
 // Retorna a subscription ativa da company, ou nil se não houver.

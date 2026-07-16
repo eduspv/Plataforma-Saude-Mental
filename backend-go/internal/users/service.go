@@ -1,6 +1,8 @@
 package users
 
 import (
+	"backend-go/internal/plans"
+	"backend-go/internal/subscriptions"
 	"context"
 	"errors"
 	"net"
@@ -8,15 +10,21 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
-	Repo *Repository
+	Repo             *Repository
+	SubscriptionRepo *subscriptions.Repository
+	PlansRepo        *plans.Repository
 }
 
-func NewService(repo *Repository) *Service {
+func NewService(repo *Repository, subsRepo *subscriptions.Repository, plansRepo *plans.Repository) *Service {
 	return &Service{
-		Repo: repo,
+		Repo:             repo,
+		SubscriptionRepo: subsRepo,
+		PlansRepo:        plansRepo,
 	}
 }
 
@@ -25,7 +33,30 @@ func (s *Service) RegisterNewEmployee(input *UserInput) (*NewEmployeeResponse, e
 		return nil, err
 	}
 
-	return nil, nil
+	if err := s.CanAddEmployee(input.Auth.CompanyID); err != nil {
+		return nil, err
+	}
+
+	exists, err := s.Repo.EmailExists(input.Req.Email)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, err
+	}
+
+	input.Req.Password, err = s.hashPassword(input.Req.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	User := s.NormalizeUserData(*input)
+	err = s.Repo.CreateNewUser(&User)
+	if err != nil {
+		return nil, err
+	}
+	Response := s.NormalizeResponse(&User)
+	return Response, nil
 }
 
 func (s *Service) validateData(input *UserInput) error {
@@ -39,13 +70,13 @@ func (s *Service) validateData(input *UserInput) error {
 		return errors.New("o cpf esta no formato incorreto")
 	}
 	if err := s.validatePassword(input.Req.Password); err != nil {
-		return errors.New("o cpf esta no formato incorreto")
+		return errors.New("a senha esta no formato incorreto")
 	}
 	if err := s.validateAcceptedTerms(input.Req.AcceptedTerms); err != nil {
-		return errors.New("o cpf esta no formato incorreto")
+		return errors.New("o termo tem que ser aceito")
 	}
 	if err := s.validateAcceptedTerms(input.Req.AcceptedPrivacyPolicy); err != nil {
-		return errors.New("o cpf esta no formato incorreto")
+		return errors.New("a politica de privacidade tem que ser aceita")
 	}
 
 	return nil
@@ -201,6 +232,29 @@ func (s *Service) validateEmail(email string) error {
 	return nil
 }
 
+func (s *Service) CanAddEmployee(companyID string) error {
+	planID, err := s.SubscriptionRepo.GetPlanIDFromCompanyID(companyID)
+	if err != nil {
+		return err
+	}
+
+	maxEmployees, err := s.PlansRepo.GetMaxEmployeesByID(planID)
+	if err != nil {
+		return err
+	}
+
+	currentEmployees, err := s.Repo.CountUsersByCompany(companyID)
+	if err != nil {
+		return err
+	}
+
+	if currentEmployees >= maxEmployees {
+		return errors.New("a empresa atingiu o limite de funcionários do plano")
+	}
+
+	return nil
+}
+
 func getEmailDomain(email string) (string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 
@@ -232,4 +286,36 @@ func calcularDigitoCPF(parteCPF string, pesoInicial int) int {
 	}
 
 	return 11 - resto
+}
+
+func (s *Service) hashPassword(password string) (string, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	return string(hashedPassword), nil
+}
+
+func (s *Service) NormalizeUserData(userInput UserInput) User {
+	now := time.Now()
+	return User{
+		CompanyID:               &userInput.Auth.CompanyID,
+		Name:                    userInput.Req.Name,
+		Email:                   userInput.Req.Email,
+		PasswordHash:            userInput.Req.Password,
+		Role:                    RoleEmployee,
+		Status:                  UserStatusActive,
+		AcceptedTerms:           userInput.Req.AcceptedTerms,
+		AcceptedTermsAt:         &now,
+		AcceptedPrivacyPolicy:   userInput.Req.AcceptedPrivacyPolicy,
+		AcceptedPrivacyPolicyAt: &now,
+	}
+}
+
+func (s *Service) NormalizeResponse(user *User) *NewEmployeeResponse {
+	return &NewEmployeeResponse{
+		Name:  user.Name,
+		Email: user.Email,
+	}
 }

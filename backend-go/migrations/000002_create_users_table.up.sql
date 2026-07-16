@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(20),
 
     accepted_terms BOOLEAN NOT NULL DEFAULT FALSE,
-    accepted_terms_at TIMESTAMPTZ NULL,
+    accepted_terms_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     accepted_privacy_policy BOOLEAN NOT NULL DEFAULT FALSE,
-    accepted_privacy_policy_at TIMESTAMPTZ NULL,
+    accepted_privacy_policy_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

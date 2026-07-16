@@ -27,3 +27,16 @@ func (r *Repository) GetByIDTx(ctx context.Context, tx pgx.Tx, id string) (*Plan
 	}
 	return &p, nil
 }
+
+func (r *Repository) GetMaxEmployeesByID(planID string) (int, error) {
+	var maxEmployees int
+
+	query := `
+		SELECT max_employees FROM plans WHERE id = $1
+	`
+	err := r.DB.QueryRow(context.Background(), query, planID).Scan(&maxEmployees)
+	if err != nil {
+		return -1, err
+	}
+	return maxEmployees, nil
+}

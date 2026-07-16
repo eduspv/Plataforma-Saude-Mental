@@ -1,6 +1,9 @@
 package users
 
 import (
+	"backend-go/internal/plans"
+	"backend-go/internal/subscriptions"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -11,8 +14,10 @@ type Routes struct {
 
 func NewRoutes(db *pgxpool.Pool) *Routes {
 	repository := NewRepository(db)
+	subsRepo := subscriptions.NewRepository(db)
+	plansRepo := plans.NewRepository(db)
 
-	service := NewService(repository)
+	service := NewService(repository, subsRepo, plansRepo)
 	handler := NewHandler(service)
 
 	return &Routes{
