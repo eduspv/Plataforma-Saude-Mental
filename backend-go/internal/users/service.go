@@ -29,6 +29,10 @@ func NewService(repo *Repository, subsRepo *subscriptions.Repository, plansRepo 
 }
 
 func (s *Service) RegisterNewEmployee(input *UserInput) (*NewEmployeeResponse, error) {
+	input.Req.Cpf = normalizeCPF(input.Req.Cpf)
+	if err := s.ValidateRole(input.Auth.Role); err != nil {
+		return nil, err
+	}
 	if err := s.validateData(input); err != nil {
 		return nil, err
 	}
@@ -36,13 +40,19 @@ func (s *Service) RegisterNewEmployee(input *UserInput) (*NewEmployeeResponse, e
 	if err := s.CanAddEmployee(input.Auth.CompanyID); err != nil {
 		return nil, err
 	}
-
-	exists, err := s.Repo.EmailExists(input.Req.Email)
+	exists, err := s.CpfExistsInCompany(input.Req.Cpf, input.Auth.CompanyID)
 	if err != nil {
 		return nil, err
 	}
 	if exists {
+		return nil, errors.New("o cpf ja esta cadastrado nessa empresa")
+	}
+	exists, err = s.Repo.EmailExists(input.Req.Email)
+	if err != nil {
 		return nil, err
+	}
+	if exists {
+		return nil, errors.New("o email ja esta cadastrado")
 	}
 
 	input.Req.Password, err = s.hashPassword(input.Req.Password)
@@ -57,6 +67,13 @@ func (s *Service) RegisterNewEmployee(input *UserInput) (*NewEmployeeResponse, e
 	}
 	Response := s.NormalizeResponse(&User)
 	return Response, nil
+}
+
+func (s *Service) ValidateRole(role string) error {
+	if role == RoleEmployee {
+		return errors.New("o usuario não pode criar um novo usuario para a empresa")
+	}
+	return nil
 }
 
 func (s *Service) validateData(input *UserInput) error {
@@ -143,6 +160,15 @@ func (s *Service) validatePassword(password string) error {
 	}
 
 	return nil
+}
+
+func (s *Service) CpfExistsInCompany(cpf, companyID string) (bool, error) {
+	cpf = normalizeCPF(cpf)
+	exists, err := s.Repo.CpfExists(cpf, companyID)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 func (s *Service) validateCPF(cpf string) error {
@@ -303,6 +329,7 @@ func (s *Service) NormalizeUserData(userInput UserInput) User {
 		CompanyID:               &userInput.Auth.CompanyID,
 		Name:                    userInput.Req.Name,
 		Email:                   userInput.Req.Email,
+		Cpf:                     &userInput.Req.Cpf,
 		PasswordHash:            userInput.Req.Password,
 		Role:                    RoleEmployee,
 		Status:                  UserStatusActive,
@@ -318,4 +345,16 @@ func (s *Service) NormalizeResponse(user *User) *NewEmployeeResponse {
 		Name:  user.Name,
 		Email: user.Email,
 	}
+}
+
+func normalizeCPF(cpf string) string {
+	cpf = strings.TrimSpace(cpf)
+
+	replacer := strings.NewReplacer(
+		".", "",
+		"-", "",
+		" ", "",
+	)
+
+	return replacer.Replace(cpf)
 }

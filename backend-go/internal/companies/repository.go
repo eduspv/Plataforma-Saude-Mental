@@ -42,6 +42,17 @@ func (r *Repository) GetCompanyByID(id string) (*Company, error) {
 	}
 	return &c, nil
 }
+func (r *Repository) GettingCompanyStatusFromID(companyID string) (string, error) {
+	var status string
+	query := `
+		SELECT status FROM companies WHERE id = $1
+	`
+	err := r.DB.QueryRow(context.Background(), query, companyID).Scan(&status)
+	if err != nil {
+		return "", err
+	}
+	return status, nil
+}
 
 func (r *Repository) UpdateAsaasCustomerID(companyID, customerID string) error {
 	query := `UPDATE companies SET asaas_customer_id = $1, updated_at = NOW() WHERE id = $2`

@@ -58,6 +58,18 @@ func (r *Repository) EmailExists(email string) (bool, error) {
 	return exists, nil
 }
 
+func (r *Repository) GetPasswordHashByEmail(email string) (string, error) {
+	var hashedPassword string
+	query := `
+		SELECT password_hash FROM users WHERE email = $1
+	`
+	err := r.DB.QueryRow(context.Background(), query, email).Scan(&hashedPassword)
+	if err != nil {
+		return "", err
+	}
+	return hashedPassword, nil
+}
+
 func (r *Repository) CNPJExists(cnpj string) (bool, error) {
 	var exists bool
 

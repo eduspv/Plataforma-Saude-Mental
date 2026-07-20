@@ -18,6 +18,57 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	}
 }
 
+func (r *Repository) GettingUserIdFromEmail(email string) (string, error) {
+	var userID string
+	query := `
+		SELECT id FROM users WHERE email = $1
+	`
+	err := r.Db.QueryRow(context.Background(), query, email).Scan(&userID)
+	if err != nil {
+		return "", err
+	}
+	return userID, nil
+}
+
+func (r *Repository) GettingCompanyIdFromEmail(email string) (string, error) {
+	var companyID string
+	query := `
+		SELECT company_id FROM users WHERE email = $1
+	`
+	err := r.Db.QueryRow(context.Background(), query, email).Scan(&companyID)
+	if err != nil {
+		return "", err
+	}
+	return companyID, nil
+}
+
+func (r *Repository) GettingUserStatusFromID(userID string) (string, error) {
+	var status string
+	query := `
+		SELECT status FROM users WHERE id = $1
+	`
+	err := r.Db.QueryRow(context.Background(), query, userID).Scan(&status)
+	if err != nil {
+		return "", err
+	}
+	return status, nil
+
+}
+
+func (r *Repository) CpfExists(cpf string, companyID string) (bool, error) {
+	var exists bool
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM users WHERE cpf = $1 AND company_id = $2
+		)
+	`
+	err := r.Db.QueryRow(context.Background(), query, cpf, companyID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (r *Repository) EmailExists(email string) (bool, error) {
 	var exists bool
 
@@ -62,6 +113,7 @@ func (r *Repository) CreateNewUser(user *User) error {
 			company_id,
 			name,
 			email,
+			cpf,
 			password_hash,
 			role,
 			status,
@@ -73,7 +125,7 @@ func (r *Repository) CreateNewUser(user *User) error {
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11
+			$7, $8, $9, $10, $11, $12
 		)
 		RETURNING id, created_at, updated_at
 	`
@@ -84,6 +136,7 @@ func (r *Repository) CreateNewUser(user *User) error {
 		user.CompanyID,
 		user.Name,
 		user.Email,
+		user.Cpf,
 		user.PasswordHash,
 		user.Role,
 		user.Status,

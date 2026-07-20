@@ -80,7 +80,7 @@ func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompan
 		return nil, err
 	}
 
-	result.Token, err = s.generateJWT(result)
+	result.Token, err = s.generateJWT(result.UserID, result.CompanyID, users.RoleCompanyAdmin, result.CompanyStatus)
 	if err != nil {
 		return nil, errors.New("não foi possível gerar o JWT")
 	}
@@ -88,13 +88,13 @@ func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompan
 	return result, nil
 }
 
-func (s *Service) generateJWT(result *RegisterCompanyResponse) (string, error) {
+func (s *Service) generateJWT(userID, companyID, role, userStatus string) (string, error) {
 	token, err := security.GenerateJWT(
 		s.JWTSecret,
-		result.UserID,
-		result.CompanyID,
-		users.RoleCompanyAdmin,
-		result.UserStatus,
+		userID,
+		companyID,
+		role,
+		userStatus,
 	)
 
 	if err != nil {
