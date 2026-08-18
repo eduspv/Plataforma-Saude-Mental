@@ -28,6 +28,51 @@ func (r *Repository) GetByIDTx(ctx context.Context, tx pgx.Tx, id string) (*Plan
 	return &p, nil
 }
 
+func (r *Repository) ListActivePlans(ctx context.Context) ([]Plan, error) {
+	query := `
+		SELECT id, name, description, price_cents, currency,
+		       due_date_limit_days, billing_cycle, max_employees,
+		       is_active, created_at, updated_at
+		FROM plans
+		WHERE is_active = true
+		ORDER BY max_employees;
+	`
+
+	rows, err := r.DB.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	plans := make([]Plan, 0)
+	for rows.Next() {
+		var p Plan
+		err := rows.Scan(
+			&p.ID,
+			&p.Name,
+			&p.Description,
+			&p.PriceCents,
+			&p.Currency,
+			&p.DueDateLimitDays,
+			&p.BillingCycle,
+			&p.MaxEmployees,
+			&p.IsActive,
+			&p.CreatedAt,
+			&p.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return plans, nil
+}
+
 func (r *Repository) GetMaxEmployeesByID(planID string) (int, error) {
 	var maxEmployees int
 

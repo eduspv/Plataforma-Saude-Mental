@@ -55,6 +55,18 @@ func (r *Repository) GettingUserStatusFromID(userID string) (string, error) {
 
 }
 
+func (r *Repository) GettingUserRoleFromID(userID string) (string, error) {
+	var role string
+	query := `
+		SELECT role FROM users WHERE id = $1
+	`
+	err := r.Db.QueryRow(context.Background(), query, userID).Scan(&role)
+	if err != nil {
+		return "", err
+	}
+	return role, nil
+}
+
 func (r *Repository) CpfExists(cpf string, companyID string) (bool, error) {
 	var exists bool
 	query := `

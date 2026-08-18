@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *Service) CompanyLogin(input LoginRequest) (*LoginResponse, error) {
+func (s *Service) Login(input LoginRequest) (*LoginResponse, error) {
 	if err := s.validateLoginData(input); err != nil {
 		return nil, err
 	}
@@ -32,82 +32,53 @@ func (s *Service) CompanyLogin(input LoginRequest) (*LoginResponse, error) {
 	if !Match {
 		return nil, errors.New("a senha não é a mesma do banco de dados")
 	}
-	userID, companyID, status, err := s.GettingJWTData(input.Email)
+	jwtData, err := s.GettingJWTData(input.Email)
 	if err != nil {
 		return nil, err
 	}
-	JWT, err := s.generateJWT(userID, companyID, users.RoleCompanyAdmin, status)
+	JWT, err := s.generateJWT(*jwtData)
 	if err != nil {
 		return nil, err
 	}
-	companyStatus, err := s.CompanyRepo.GettingCompanyStatusFromID(companyID)
+
+	companyStatus, err := s.CompanyRepo.GettingCompanyStatusFromID(jwtData.CompanyID)
 	if err != nil {
 		return nil, err
 	}
+	nextStep := s.nextStep(jwtData.role, jwtData.status)
 	return &LoginResponse{
-		CompanyID:     companyID,
-		UserID:        userID,
-		UserStatus:    status,
+		CompanyID:     jwtData.CompanyID,
+		UserID:        jwtData.userID,
+		UserStatus:    jwtData.status,
 		CompanyStatus: companyStatus,
-		NextStep:      "admin-dashboard",
+		NextStep:      nextStep,
 		Token:         JWT,
 	}, nil
 }
 
-func (s *Service) UserLogin(input LoginRequest) (*LoginResponse, error) {
-	if err := s.validateLoginData(input); err != nil {
-		return nil, err
-	}
-	exists, err := s.Repository.EmailExists(input.Email)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.New("o email não esta cadastrado no banco de dados")
-	}
-	hashedPw, err := s.Repository.GetPasswordHashByEmail(input.Email)
-	if err != nil {
-		return nil, err
-	}
-	Match, err := s.PasswordsMatch(input.Password, hashedPw)
-	if err != nil {
-		return nil, err
-	}
-	if !Match {
-		return nil, errors.New("a senha não é a mesma do banco de dados")
-	}
-	userID, companyID, status, err := s.GettingJWTData(input.Email)
-	if err != nil {
-		return nil, err
-	}
-	JWT, err := s.generateJWT(userID, companyID, users.RoleEmployee, status)
-	if err != nil {
-		return nil, err
-	}
-
-	return &LoginResponse{
-		CompanyID:  companyID,
-		UserID:     userID,
-		UserStatus: status,
-		NextStep:   "home-page",
-		Token:      JWT,
-	}, nil
-}
-
-func (s *Service) GettingJWTData(email string) (string, string, string, error) {
+func (s *Service) GettingJWTData(email string) (*JWTData, error) {
+	jwtData := &JWTData{}
 	userID, err := s.UserRepo.GettingUserIdFromEmail(email)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
+	jwtData.userID = userID
 	CompanyID, err := s.UserRepo.GettingCompanyIdFromEmail(email)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
+	jwtData.CompanyID = CompanyID
 	status, err := s.UserRepo.GettingUserStatusFromID(userID)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
-	return userID, CompanyID, status, nil
+	jwtData.status = status
+	role, err := s.UserRepo.GettingUserRoleFromID(userID)
+	if err != nil {
+		return nil, err
+	}
+	jwtData.role = role
+	return jwtData, nil
 
 }
 
@@ -197,4 +168,18 @@ func (s *Service) PasswordsMatch(password, hashedPassword string) (bool, error) 
 	}
 
 	return false, fmt.Errorf("erro ao comparar senha: %w", err)
+}
+
+// melhorar essa parte do codigo pensar numa logica melhor
+func (s *Service) nextStep(role, status string) string {
+	if role == users.RoleSystemAdmin {
+		return "system_admin_dashboard"
+	}
+	if role == users.RoleCompanyAdmin {
+		if status == users.UserStatusActive {
+			return "company_admin_dashboard"
+		}
+		return "plan_selection"
+	}
+	return "home"
 }
