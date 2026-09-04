@@ -65,3 +65,15 @@ func (r *Repository) UpdateAsaasCustomerID(companyID, customerID string) error {
 	}
 	return nil
 }
+
+func (r *Repository) GetCompanyProfileData(ctx context.Context, companyID string) (*CompanyProfileResponse, error) {
+	profileData := &CompanyProfileResponse{}
+	query := `
+		SELECT name, corporate_email, status, cnpj, phone FROM companies WHERE id = $1
+	`
+	err := r.DB.QueryRow(ctx, query, companyID).Scan(&profileData.Name, &profileData.Email, &profileData.Status, &profileData.Cnpj, &profileData.Telefone)
+	if err != nil {
+		return nil, err
+	}
+	return profileData, nil
+}

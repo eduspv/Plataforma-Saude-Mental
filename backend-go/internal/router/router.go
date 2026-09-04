@@ -4,8 +4,12 @@ import (
 	"log"
 	"time"
 
+	"backend-go/internal/assesments/forms"
+	"backend-go/internal/assesments/results"
 	"backend-go/internal/auth"
 	"backend-go/internal/checkout"
+	"backend-go/internal/companies"
+	"backend-go/internal/dashboard"
 	"backend-go/internal/middleware"
 	"backend-go/internal/plans"
 	"backend-go/internal/users"
@@ -66,6 +70,10 @@ func SetupRouter(db *pgxpool.Pool, jwtSecret string, APIKey string, webhookToken
 
 	log.Println("[ROUTER] Registrando rotas protegidas (login + plano ativo)")
 	users.NewRoutes(db).RegisterRoutes(protectedByPlan)
+	forms.NewRoutes(db).RegisterRoutes(protectedByPlan)
+	results.NewRoutes(db).RegisterRoutes(protectedByPlan)
+	dashboard.NewRoutes(db).RegisterRoutes(protectedByPlan)
+	companies.NewRoutes(db).RegisterRoutes(protectedByPlan)
 
 	log.Println("[ROUTER] Setup das rotas concluído")
 	return r

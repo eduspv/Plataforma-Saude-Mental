@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -97,6 +98,14 @@ func (r *Repository) EmailExists(email string) (bool, error) {
 	return exists, nil
 }
 
+func (r *Repository) ActivateCompanyAdmin(ctx context.Context, tx pgx.Tx, companyID string) error {
+	query := `UPDATE users SET status = 'active' WHERE company_id = $1 AND role = 'COMPANY_ADMIN'`
+	_, err := tx.Exec(ctx, query, companyID)
+	if err != nil {
+		return fmt.Errorf("ativar admin da empresa: %w", err)
+	}
+	return nil
+}
 func (r *Repository) CountUsersByCompany(companyID string) (int, error) {
 	var amount int
 
@@ -168,4 +177,63 @@ func (r *Repository) CreateNewUser(user *User) error {
 	}
 
 	return nil
+}
+
+func (r *Repository) ListEmployeesByCompany(ctx context.Context, companyID string) ([]EmployeeListItem, error) {
+	query := `
+		SELECT id, name, email, status, created_at
+		FROM users
+		WHERE company_id = $1
+		  AND role = 'EMPLOYEE'
+		ORDER BY name ASC`
+
+	rows, err := r.Db.Query(ctx, query, companyID)
+	if err != nil {
+		return nil, fmt.Errorf("listar colaboradores: %w", err)
+	}
+	defer rows.Close()
+
+	employees := []EmployeeListItem{}
+	for rows.Next() {
+		var e EmployeeListItem
+		if err := rows.Scan(&e.ID, &e.Name, &e.Email, &e.Status, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("ler colaborador: %w", err)
+		}
+		employees = append(employees, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar colaboradores: %w", err)
+	}
+
+	return employees, nil
+}
+
+func (r *Repository) DeactivateEmployee(ctx context.Context, employeeID, companyID string) (bool, error) {
+	query := `
+		UPDATE users
+		SET status = 'inactive', updated_at = NOW()
+		WHERE id = $1
+		  AND company_id = $2
+		  AND role = 'EMPLOYEE'
+		  AND status != 'inactive'`
+
+	tag, err := r.Db.Exec(ctx, query, employeeID, companyID)
+	if err != nil {
+		return false, fmt.Errorf("desativar colaborador: %w", err)
+	}
+
+	// linhas afetadas: 1 = desativou; 0 = não achou / não é da empresa / já inativo
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *Repository) GetUserProfileData(ctx context.Context, userID string) (*ProfileDataResponse, error) {
+	response := &ProfileDataResponse{}
+	query := `
+		SELECT name, email FROM users WHERE id = $1
+	`
+	err := r.Db.QueryRow(ctx, query, userID).Scan(&response.Name, &response.Email)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }

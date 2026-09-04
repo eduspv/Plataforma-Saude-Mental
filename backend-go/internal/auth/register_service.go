@@ -47,10 +47,10 @@ func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompan
 func (s *Service) generateJWT(data JWTData) (string, error) {
 	token, err := security.GenerateJWT(
 		s.JWTSecret,
-		data.userID,
+		data.UserID,
 		data.CompanyID,
-		data.role,
-		data.status,
+		data.Role,
+		data.Status,
 	)
 
 	if err != nil {
@@ -356,10 +356,10 @@ func (s *Service) buildCompanyAdminUser(input RegisterCompanyRequest, hashedPass
 
 func (s *Service) normalizeCompanyAdminjwtData(UserID, CompanyID, CompanyStatus string) JWTData {
 	return JWTData{
-		userID:    UserID,
+		UserID:    UserID,
 		CompanyID: CompanyID,
-		role:      users.RoleCompanyAdmin,
-		status:    CompanyStatus,
+		Role:      users.RoleCompanyAdmin,
+		Status:    CompanyStatus,
 	}
 }
 

@@ -26,7 +26,7 @@ type RegisterCompanyResponse struct {
 
 type LoginRequest struct {
 	Email    string `json:"email"`
-	Password string `json:"Password"`
+	Password string `json:"password"`
 }
 
 type LoginResponse struct {
@@ -34,6 +34,7 @@ type LoginResponse struct {
 	UserID        string `json:"user_id"`
 	CompanyStatus string `json:"company_status"`
 	UserStatus    string `json:"user_status"`
+	Role          string `json:"role"`
 	NextStep      string `json:"next_step"`
 	Token         string `json:"token"`
 }

@@ -1,6 +1,8 @@
 package users
 
 import (
+	"backend-go/internal/audit"
+	"backend-go/internal/middleware"
 	"backend-go/internal/plans"
 	"backend-go/internal/subscriptions"
 
@@ -16,8 +18,10 @@ func NewRoutes(db *pgxpool.Pool) *Routes {
 	repository := NewRepository(db)
 	subsRepo := subscriptions.NewRepository(db)
 	plansRepo := plans.NewRepository(db)
+	auditRepo := audit.NewRepository(db)
+	auditService := audit.NewService(auditRepo)
 
-	service := NewService(repository, subsRepo, plansRepo)
+	service := NewService(repository, subsRepo, plansRepo, auditService)
 	handler := NewHandler(service)
 
 	return &Routes{
@@ -27,6 +31,9 @@ func NewRoutes(db *pgxpool.Pool) *Routes {
 
 func (r *Routes) RegisterRoutes(rg *gin.RouterGroup) {
 	users := rg.Group("/users")
-
-	users.POST("/create-employee", r.Handler.RegisterNewEmployee)
+	// Rotas que requerem um role correto (admin da empresa ou do sistema)
+	users.POST("/create-employee", middleware.RequireRole("COMPANY_ADMIN", "SYSTEM_ADMIN"), r.Handler.RegisterNewEmployee)
+	users.GET("/list-employees", middleware.RequireRole("COMPANY_ADMIN", "SYSTEM_ADMIN"), r.Handler.ListOfAllCompanieEmployees)
+	users.PATCH("/:id/deactivate", middleware.RequireRole("COMPANY_ADMIN", "SYSTEM_ADMIN"), r.Handler.DeactivateEmployee)
+	users.GET("/me", r.Handler.GetUserProfileData)
 }

@@ -40,6 +40,10 @@ func (h *Handler) RegisterCompany(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Logout(c *gin.Context) {
+	return
+}
+
 func (h *Handler) Login(c *gin.Context) {
 	var input LoginRequest
 

@@ -45,11 +45,12 @@ func (s *Service) Login(input LoginRequest) (*LoginResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	nextStep := s.nextStep(jwtData.role, jwtData.status)
+	nextStep := s.nextStep(jwtData.Role, jwtData.Status)
 	return &LoginResponse{
 		CompanyID:     jwtData.CompanyID,
-		UserID:        jwtData.userID,
-		UserStatus:    jwtData.status,
+		UserID:        jwtData.UserID,
+		UserStatus:    jwtData.Status,
+		Role:          jwtData.Role,
 		CompanyStatus: companyStatus,
 		NextStep:      nextStep,
 		Token:         JWT,
@@ -62,7 +63,7 @@ func (s *Service) GettingJWTData(email string) (*JWTData, error) {
 	if err != nil {
 		return nil, err
 	}
-	jwtData.userID = userID
+	jwtData.UserID = userID
 	CompanyID, err := s.UserRepo.GettingCompanyIdFromEmail(email)
 	if err != nil {
 		return nil, err
@@ -72,12 +73,12 @@ func (s *Service) GettingJWTData(email string) (*JWTData, error) {
 	if err != nil {
 		return nil, err
 	}
-	jwtData.status = status
+	jwtData.Status = status
 	role, err := s.UserRepo.GettingUserRoleFromID(userID)
 	if err != nil {
 		return nil, err
 	}
-	jwtData.role = role
+	jwtData.Role = role
 	return jwtData, nil
 
 }

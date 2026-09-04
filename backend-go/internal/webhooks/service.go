@@ -7,6 +7,7 @@ import (
 
 	"backend-go/internal/payments"
 	"backend-go/internal/subscriptions"
+	"backend-go/internal/users"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,14 +18,16 @@ type Service struct {
 	DB          *pgxpool.Pool
 	PaymentRepo *payments.Repository
 	SubsService *subscriptions.Service
+	UserRepo    *users.Repository
 }
 
-func NewService(db *pgxpool.Pool, repo *Repository, subsService *subscriptions.Service) *Service {
+func NewService(db *pgxpool.Pool, repo *Repository, subsService *subscriptions.Service, userRepo *users.Repository) *Service {
 	return &Service{
 		Repo:        repo,
 		DB:          db,
 		PaymentRepo: payments.NewRepository(db),
 		SubsService: subsService,
+		UserRepo:    userRepo,
 	}
 }
 
@@ -128,6 +131,15 @@ func (s *Service) handlePaymentPaid(event, checkoutSessionID, providerPaymentID,
 
 	log.Printf("[SERVICE] subscription ativada company_id=%s plan_id=%s",
 		session.CompanyID, session.PlanID)
+	// Payment novo → ativa também o admin da empresa, na MESMA transação.
+	// Sem isso, o users.status do admin nunca vira 'active' e o login
+	// devolve ele pro /planos pra sempre, mesmo tendo pago.
+	if err := s.UserRepo.ActivateCompanyAdmin(ctx, tx, session.CompanyID); err != nil {
+		log.Printf("[SERVICE] ERRO ao ativar admin da empresa: %v", err)
+		return err // defer Rollback desfaz TUDO — inclusive subscription e payment
+	}
+
+	log.Printf("[SERVICE] admin da empresa ativado company_id=%s", session.CompanyID)
 
 	return tx.Commit(ctx)
 }

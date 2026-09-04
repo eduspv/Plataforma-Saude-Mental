@@ -16,6 +16,7 @@ import (
 	"log"
 	"time"
 
+	"backend-go/internal/audit"
 	"backend-go/internal/auth"
 	"backend-go/internal/companies"
 	"backend-go/internal/config"
@@ -56,6 +57,10 @@ func main() {
 	defer db.Close()
 
 	log.Println("[SEED] conectado ao banco")
+
+	if err := seedDiagnosticQuestions(ctx, db); err != nil {
+		log.Fatalf("seed diagnóstico falhou: %v", err)
+	}
 
 	// 2. Precisamos de um plano existente pra vincular a subscription.
 	plansRepo := plans.NewRepository(db)
@@ -136,7 +141,8 @@ func main() {
 
 	// 7. Agora sim, cria o colaborador via service real (exige subscription ativa).
 	usersRepo := users.NewRepository(db)
-	usersService := users.NewService(usersRepo, subsRepo, plansRepo)
+	auditService := audit.NewService(audit.NewRepository(db))
+	usersService := users.NewService(usersRepo, subsRepo, plansRepo, auditService)
 	_, err = usersService.RegisterNewEmployee(&users.UserInput{
 		Req: users.NewEmployeeRequest{
 			Name:                  employeeName,
@@ -162,6 +168,57 @@ func main() {
 	fmt.Printf("  Admin:       %s / %s\n", adminEmail, adminPassword)
 	fmt.Printf("  Colaborador: %s / %s\n", employeeEmail, employeePassword)
 	fmt.Println("─────────────────────────────────────────")
+}
+
+func seedDiagnosticQuestions(ctx context.Context, db *pgxpool.Pool) error {
+	// Guard de idempotência: se já houver perguntas, não duplica ao rodar de novo.
+	var count int
+	if err := db.QueryRow(ctx, `SELECT COUNT(*) FROM diagnostic_questions`).Scan(&count); err != nil {
+		return fmt.Errorf("contar perguntas do diagnóstico: %w", err)
+	}
+	if count > 0 {
+		log.Printf("seed diagnóstico: %d perguntas já existem, pulando.", count)
+		return nil
+	}
+
+	type seedQuestion struct {
+		step       int
+		text       string
+		qType      string
+		options    any // string JSON para multiple_choice, nil para os demais
+		weight     int
+		isCritical bool
+		order      int
+	}
+
+	// ValidateAnswers/scoring só implementa scale_1_5 hoje (yes_no e
+	// multiple_choice estão comentados no service, são backlog) — por
+	// isso todas as perguntas do seed são scale_1_5, senão o submit
+	// completo estoura 500 ao validar as perguntas dos outros tipos.
+	questions := []seedQuestion{
+		{1, "Com que frequência você tem se sentido sobrecarregado(a) no trabalho?", "scale_1_5", nil, 2, false, 1},
+		{2, "Como você avalia a qualidade do seu sono nas últimas semanas?", "scale_1_5", nil, 2, false, 1},
+		{3, "Em uma escala de 1 a 5, o quanto você tem tido pensamentos que te causam sofrimento e preocupação?", "scale_1_5", nil, 3, true, 1},
+		{4, "Em uma escala de 1 a 5, com que frequência você consegue se desconectar do trabalho no tempo livre?", "scale_1_5", nil, 1, false, 1},
+		{5, "No geral, como você tem se sentido em relação ao seu bem-estar emocional?", "scale_1_5", nil, 2, false, 1},
+	}
+
+	const insert = `
+		INSERT INTO diagnostic_questions
+			(form_version, step, question_text, type, options, weight, is_critical, is_active, display_order)
+		VALUES
+			(1, $1, $2, $3, $4::jsonb, $5, $6, TRUE, $7)`
+
+	for _, q := range questions {
+		if _, err := db.Exec(ctx, insert,
+			q.step, q.text, q.qType, q.options, q.weight, q.isCritical, q.order,
+		); err != nil {
+			return fmt.Errorf("inserir pergunta (step %d): %w", q.step, err)
+		}
+	}
+
+	log.Printf("seed diagnóstico: %d perguntas inseridas (form_version=1).", len(questions))
+	return nil
 }
 
 // adicione ao seed, e o import "golang.org/x/crypto/bcrypt"

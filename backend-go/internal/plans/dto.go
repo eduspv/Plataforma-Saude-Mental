@@ -10,3 +10,13 @@ type AllPlansResponse struct {
 	MaxEmployees int      `json:"max_employees"`
 	Features     []string `json:"features"`
 }
+
+type PlanDashboardData struct {
+	Name         string
+	MaxEmployees int
+	PriceCents   int
+	Currency     string
+	BillingCycle string
+	//precisa ainda fazer a logica em outra struct na resposta de forma de pagamento e do status
+	//TODO: Descobrir como vou fazer o proximo vencimento
+}

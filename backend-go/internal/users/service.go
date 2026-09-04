@@ -1,6 +1,7 @@
 package users
 
 import (
+	"backend-go/internal/audit"
 	"backend-go/internal/plans"
 	"backend-go/internal/subscriptions"
 	"context"
@@ -18,13 +19,15 @@ type Service struct {
 	Repo             *Repository
 	SubscriptionRepo *subscriptions.Repository
 	PlansRepo        *plans.Repository
+	AuditService     *audit.Service
 }
 
-func NewService(repo *Repository, subsRepo *subscriptions.Repository, plansRepo *plans.Repository) *Service {
+func NewService(repo *Repository, subsRepo *subscriptions.Repository, plansRepo *plans.Repository, auditService *audit.Service) *Service {
 	return &Service{
 		Repo:             repo,
 		SubscriptionRepo: subsRepo,
 		PlansRepo:        plansRepo,
+		AuditService:     auditService,
 	}
 }
 
@@ -357,4 +360,43 @@ func normalizeCPF(cpf string) string {
 	)
 
 	return replacer.Replace(cpf)
+}
+
+func (s *Service) GetAllCompanieEmployees(ctx context.Context, companyID string) (*ListOfEmployeeResponse, error) {
+	listOfemployees, err := s.Repo.ListEmployeesByCompany(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	return &ListOfEmployeeResponse{
+		AllCompanyEmployees: listOfemployees,
+	}, nil
+}
+
+func (s *Service) GetProfileData(ctx context.Context, userID string) (*ProfileDataResponse, error) {
+	profileData, err := s.Repo.GetUserProfileData(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return profileData, nil
+}
+
+func (s *Service) UpdateEmployeeToInactive(ctx context.Context, employeeID, companyID, actorUserID string) error {
+	rowsAffected, err := s.Repo.DeactivateEmployee(ctx, employeeID, companyID)
+	if err != nil {
+		return err
+	}
+	if !rowsAffected {
+		return errors.New("não foi possível desativar o colaborador")
+	}
+
+	// Sucesso confirmado (UPDATE commitado). Só agora audita — best-effort.
+	s.AuditService.Log(ctx, audit.Event{
+		ActorUserID: actorUserID,
+		CompanyID:   companyID,
+		Action:      "employee.deactivated",
+		EntityType:  "user",
+		EntityID:    employeeID,
+	})
+
+	return nil
 }

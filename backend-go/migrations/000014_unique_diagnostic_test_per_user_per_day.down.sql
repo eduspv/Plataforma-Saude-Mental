@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS uniq_diagnostic_test_user_day;

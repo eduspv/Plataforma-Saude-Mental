@@ -85,3 +85,15 @@ func (r *Repository) GetMaxEmployeesByID(planID string) (int, error) {
 	}
 	return maxEmployees, nil
 }
+
+func (r *Repository) GetPlanDashboardData(ctx context.Context, planID string) (*PlanDashboardData, error) {
+	Data := &PlanDashboardData{}
+	query := `
+		SELECT name, max_employees, price_cents, currency, billing_cycle FROM plans WHERE id = $1
+	`
+	err := r.DB.QueryRow(ctx, query, planID).Scan(&Data.Name, &Data.MaxEmployees, &Data.PriceCents, &Data.Currency, &Data.BillingCycle)
+	if err != nil {
+		return nil, err
+	}
+	return Data, nil
+}

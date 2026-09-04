@@ -1,6 +1,10 @@
 package dashboard
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
 
 type Handler struct {
 	Service *Service
@@ -13,11 +17,19 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) DashboardData(c *gin.Context) {
-	//var input AuthContext
-	//:= h.Service.GettingDAshboardData(input)
+	companyID := c.GetString("company_id")
+	companyDashboardResponse, err := h.Service.GettingDashboardData(c.Request.Context(), companyID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "falhou em alguma busca",
+		})
+		return
+	}
 
-	c.JSON(501, gin.H{
-		"success": false,
-		"message": "Not Implemented",
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "sucesso em achar os dados do dashboard",
+		"data":    companyDashboardResponse,
 	})
 }
