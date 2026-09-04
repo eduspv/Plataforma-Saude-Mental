@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+/*
+ * Fundação do design editorial dark (landing).
+ * Tailwind v4 não usa tailwind.config.js neste projeto — os tokens
+ * abaixo, no namespace @theme, geram as utilities automaticamente
+ * (--font-serif -> font-serif, --color-brand-dark -> bg-brand-dark
+ * / text-brand-dark / border-brand-dark, etc).
+ */
+@theme {
+  --font-serif: "Cormorant Garamond", ui-serif, Georgia, serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  /* fundo escuro editorial (slate-950) e sua variante de hover */
+  --color-brand-dark: #020617;
+  --color-brand-dark-soft: #0f172a;
+
+  /* creme usado nos fundos claros do editorial (hero de login/cadastro) */
+  --color-brand-cream: #f9f8f5;
+
+  /* acentos — azul (informação) e verde (privacidade/confiança) */
+  --color-brand-accent-blue: #2563eb;
+  --color-brand-accent-blue-dark: #1d4ed8;
+  --color-brand-accent-green: #059669;
+  --color-brand-accent-green-dark: #047857;
+}
