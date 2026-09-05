@@ -1,4 +1,4 @@
-# SASBio — Plataforma de Saúde Mental Corporativa
+# SASBIO — Plataforma de Saúde Mental Corporativa
 
 Plataforma multi-tenant para triagem de riscos psicossociais no ambiente de trabalho, alinhada à **NR-01** (Norma Regulamentadora nº 1 do Ministério do Trabalho).
 
