@@ -23,3 +23,18 @@ type RegisterCompanyResponse struct {
 	NextStep      string `json:"next_step"`
 	Token         string `json:"token"`
 }
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	CompanyID     string `json:"company_id"`
+	UserID        string `json:"user_id"`
+	CompanyStatus string `json:"company_status"`
+	UserStatus    string `json:"user_status"`
+	Role          string `json:"role"`
+	NextStep      string `json:"next_step"`
+	Token         string `json:"token"`
+}

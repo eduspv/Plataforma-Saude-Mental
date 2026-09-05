@@ -18,6 +18,21 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
 
     checkout_url TEXT,
 
+    -- Dados enviados ao Asaas
+    external_reference VARCHAR(255),
+    description TEXT,
+    due_date_limit_days INTEGER,
+    max_installment_count INTEGER,
+    subscription_cycle VARCHAR(40),
+    end_date DATE,
+    notification_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    is_address_required BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- URLs opcionais de redirecionamento
+    success_url TEXT,
+    cancel_url TEXT,
+    expired_url TEXT,
+
     expires_at TIMESTAMPTZ,
     paid_at TIMESTAMPTZ,
     failed_at TIMESTAMPTZ,
@@ -39,7 +54,9 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
         REFERENCES plans(id)
         ON DELETE RESTRICT,
 
-    CONSTRAINT checkout_sessions_amount_check CHECK (amount_cents >= 0),
+    CONSTRAINT checkout_sessions_amount_check CHECK (
+        amount_cents >= 0
+    ),
 
     CONSTRAINT checkout_sessions_status_check CHECK (
         status IN (
@@ -53,7 +70,6 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
 
     CONSTRAINT checkout_sessions_billing_type_check CHECK (
         billing_type IN (
-            'UNDEFINED',
             'BOLETO',
             'CREDIT_CARD',
             'PIX'
@@ -65,6 +81,24 @@ CREATE TABLE IF NOT EXISTS checkout_sessions (
             'DETACHED',
             'RECURRENT',
             'INSTALLMENT'
+        )
+    ),
+
+    CONSTRAINT checkout_sessions_due_date_limit_days_check CHECK (
+        due_date_limit_days IS NULL
+        OR due_date_limit_days >= 1
+    ),
+
+    CONSTRAINT checkout_sessions_max_installment_count_check CHECK (
+        max_installment_count IS NULL
+        OR max_installment_count >= 1
+    ),
+
+    CONSTRAINT checkout_sessions_subscription_cycle_check CHECK (
+        subscription_cycle IS NULL
+        OR subscription_cycle IN (
+            'MONTHLY',
+            'YEARLY'
         )
     )
 );

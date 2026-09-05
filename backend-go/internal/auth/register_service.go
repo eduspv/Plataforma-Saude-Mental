@@ -14,54 +14,9 @@ import (
 )
 
 func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompanyResponse, error) {
-	if err := s.validateRegisterCompanyInput(input); err != nil {
+	if err := s.validationsForRegister(input); err != nil {
 		return nil, err
 	}
-
-	if err := s.validateCompanyName(input.CompanyName); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateResponsibleName(input.ResponsibleName); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateCorporateEmail(input.CorporateEmail); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateCorporateEmail(input.ResponsibleEmail); err != nil {
-		return nil, err
-	}
-
-	if err := s.validatePassword(input.Password); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateCNPJFormat(input.CNPJ); err != nil {
-		return nil, err
-	}
-
-	if err := s.validatePhone(input.CompanyPhone); err != nil {
-		return nil, err
-	}
-
-	if err := s.validatePhone(input.ResponsiblePhone); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateCompanyDoesNotExist(input.CNPJ); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateUserDoesNotExist(input.ResponsibleEmail); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateCompanyEmailDoesNotExist(input.CorporateEmail); err != nil {
-		return nil, err
-	}
-
 	if err := s.Api.VerifyCNPJ(input.CNPJ); err != nil {
 		return nil, err
 	}
@@ -79,8 +34,9 @@ func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompan
 	if err != nil {
 		return nil, err
 	}
+	jwtData := s.normalizeCompanyAdminjwtData(result.UserID, result.CompanyID, result.CompanyStatus)
 
-	result.Token, err = s.generateJWT(result)
+	result.Token, err = s.generateJWT(jwtData)
 	if err != nil {
 		return nil, errors.New("não foi possível gerar o JWT")
 	}
@@ -88,13 +44,13 @@ func (s *Service) RegisterCompany(input RegisterCompanyRequest) (*RegisterCompan
 	return result, nil
 }
 
-func (s *Service) generateJWT(result *RegisterCompanyResponse) (string, error) {
+func (s *Service) generateJWT(data JWTData) (string, error) {
 	token, err := security.GenerateJWT(
 		s.JWTSecret,
-		result.UserID,
-		result.CompanyID,
-		users.RoleCompanyAdmin,
-		result.UserStatus,
+		data.UserID,
+		data.CompanyID,
+		data.Role,
+		data.Status,
 	)
 
 	if err != nil {
@@ -102,6 +58,57 @@ func (s *Service) generateJWT(result *RegisterCompanyResponse) (string, error) {
 	}
 
 	return token, nil
+}
+
+func (s *Service) validationsForRegister(input RegisterCompanyRequest) error {
+	if err := s.validateRegisterCompanyInput(input); err != nil {
+		return err
+	}
+
+	if err := s.validateCompanyName(input.CompanyName); err != nil {
+		return err
+	}
+
+	if err := s.validateResponsibleName(input.ResponsibleName); err != nil {
+		return err
+	}
+
+	if err := s.validateCorporateEmail(input.CorporateEmail); err != nil {
+		return err
+	}
+
+	if err := s.validateCorporateEmail(input.ResponsibleEmail); err != nil {
+		return err
+	}
+
+	if err := s.validatePassword(input.Password); err != nil {
+		return err
+	}
+
+	if err := s.validateCNPJFormat(input.CNPJ); err != nil {
+		return err
+	}
+
+	if err := s.validatePhone(input.CompanyPhone); err != nil {
+		return err
+	}
+
+	if err := s.validatePhone(input.ResponsiblePhone); err != nil {
+		return err
+	}
+
+	if err := s.validateCompanyDoesNotExist(input.CNPJ); err != nil {
+		return err
+	}
+
+	if err := s.validateUserDoesNotExist(input.ResponsibleEmail); err != nil {
+		return err
+	}
+
+	if err := s.validateCompanyEmailDoesNotExist(input.CorporateEmail); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Service) validateRegisterCompanyInput(input RegisterCompanyRequest) error {
@@ -344,6 +351,15 @@ func (s *Service) buildCompanyAdminUser(input RegisterCompanyRequest, hashedPass
 		Phone:                 cleanOnlyNumbers(input.ResponsiblePhone),
 		AcceptedTerms:         input.AcceptedTerms,
 		AcceptedPrivacyPolicy: input.AcceptedPrivacyPolicy,
+	}
+}
+
+func (s *Service) normalizeCompanyAdminjwtData(UserID, CompanyID, CompanyStatus string) JWTData {
+	return JWTData{
+		UserID:    UserID,
+		CompanyID: CompanyID,
+		Role:      users.RoleCompanyAdmin,
+		Status:    CompanyStatus,
 	}
 }
 

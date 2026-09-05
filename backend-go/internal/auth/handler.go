@@ -40,8 +40,34 @@ func (h *Handler) RegisterCompany(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Logout(c *gin.Context) {
+	return
+}
+
 func (h *Handler) Login(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"message": "Login realizado com sucesso!",
+	var input LoginRequest
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": "Dados inválidos",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	result, err := h.Service.Login(input)
+	if err != nil {
+		c.JSON(400, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(201, gin.H{
+		"success": true,
+		"message": "Cadastro iniciado com sucesso",
+		"data":    result,
 	})
 }

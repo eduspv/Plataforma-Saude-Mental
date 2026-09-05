@@ -22,8 +22,6 @@ CREATE TABLE IF NOT EXISTS payments (
 
     failure_reason TEXT,
 
-    raw_payload JSONB,
-
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 

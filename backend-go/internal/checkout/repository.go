@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,6 +27,7 @@ func (r *Repository) GetActivePlanByID(planID string) (*plans.Plan, error) {
 			COALESCE(description, ''),
 			price_cents,
 			currency,
+			due_date_limit_days,
 			billing_cycle,
 			max_employees,
 			is_active
@@ -47,6 +48,7 @@ func (r *Repository) GetActivePlanByID(planID string) (*plans.Plan, error) {
 		&plan.Description,
 		&plan.PriceCents,
 		&plan.Currency,
+		&plan.DueDateLimitDays,
 		&plan.BillingCycle,
 		&plan.MaxEmployees,
 		&plan.IsActive,
@@ -74,10 +76,18 @@ func (r *Repository) CreateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			charge_type,
 			status,
 			amount_cents,
-			currency
+			currency,
+			external_reference,
+			description,
+			due_date_limit_days,
+			max_installment_count,
+			subscription_cycle,
+			end_date,
+			notification_enabled
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
+			$1, $2, $3, $4, $5, $6, $7, $8,
+			$9, $10, $11, $12, $13, $14, $15, $16
 		)
 		RETURNING
 			id,
@@ -92,6 +102,13 @@ func (r *Repository) CreateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			amount_cents,
 			currency,
 			checkout_url,
+			external_reference,
+			description,
+			due_date_limit_days,
+			max_installment_count,
+			subscription_cycle,
+			end_date,
+			notification_enabled,
 			expires_at,
 			paid_at,
 			failed_at,
@@ -114,6 +131,13 @@ func (r *Repository) CreateCheckoutSession(checkoutSession *CheckoutSession) (*C
 		checkoutSession.Status,
 		checkoutSession.AmountCents,
 		checkoutSession.Currency,
+		checkoutSession.ExternalReference,
+		checkoutSession.Description,
+		checkoutSession.DueDateLimitDays,
+		checkoutSession.MaxInstallmentCount,
+		checkoutSession.SubscriptionCycle,
+		checkoutSession.EndDate,
+		checkoutSession.NotificationEnabled,
 	).Scan(
 		&createdCheckoutSession.ID,
 		&createdCheckoutSession.UserID,
@@ -127,6 +151,13 @@ func (r *Repository) CreateCheckoutSession(checkoutSession *CheckoutSession) (*C
 		&createdCheckoutSession.AmountCents,
 		&createdCheckoutSession.Currency,
 		&createdCheckoutSession.CheckoutURL,
+		&createdCheckoutSession.ExternalReference,
+		&createdCheckoutSession.Description,
+		&createdCheckoutSession.DueDateLimitDays,
+		&createdCheckoutSession.MaxInstallmentCount,
+		&createdCheckoutSession.SubscriptionCycle,
+		&createdCheckoutSession.EndDate,
+		&createdCheckoutSession.NotificationEnabled,
 		&createdCheckoutSession.ExpiresAt,
 		&createdCheckoutSession.PaidAt,
 		&createdCheckoutSession.FailedAt,
@@ -157,12 +188,19 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			amount_cents = $9,
 			currency = $10,
 			checkout_url = $11,
-			expires_at = $12,
-			paid_at = $13,
-			failed_at = $14,
-			failure_reason = $15,
+			external_reference = $12,
+			description = $13,
+			due_date_limit_days = $14,
+			max_installment_count = $15,
+			subscription_cycle = $16,
+			end_date = $17,
+			notification_enabled = $18,
+			expires_at = $19,
+			paid_at = $20,
+			failed_at = $21,
+			failure_reason = $22,
 			updated_at = NOW()
-		WHERE id = $16
+		WHERE id = $23
 		RETURNING
 			id,
 			user_id,
@@ -176,6 +214,13 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 			amount_cents,
 			currency,
 			checkout_url,
+			external_reference,
+			description,
+			due_date_limit_days,
+			max_installment_count,
+			subscription_cycle,
+			end_date,
+			notification_enabled,
 			expires_at,
 			paid_at,
 			failed_at,
@@ -200,6 +245,13 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 		checkoutSession.AmountCents,
 		checkoutSession.Currency,
 		checkoutSession.CheckoutURL,
+		checkoutSession.ExternalReference,
+		checkoutSession.Description,
+		checkoutSession.DueDateLimitDays,
+		checkoutSession.MaxInstallmentCount,
+		checkoutSession.SubscriptionCycle,
+		checkoutSession.EndDate,
+		checkoutSession.NotificationEnabled,
 		checkoutSession.ExpiresAt,
 		checkoutSession.PaidAt,
 		checkoutSession.FailedAt,
@@ -218,6 +270,13 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 		&updatedCheckoutSession.AmountCents,
 		&updatedCheckoutSession.Currency,
 		&updatedCheckoutSession.CheckoutURL,
+		&updatedCheckoutSession.ExternalReference,
+		&updatedCheckoutSession.Description,
+		&updatedCheckoutSession.DueDateLimitDays,
+		&updatedCheckoutSession.MaxInstallmentCount,
+		&updatedCheckoutSession.SubscriptionCycle,
+		&updatedCheckoutSession.EndDate,
+		&updatedCheckoutSession.NotificationEnabled,
 		&updatedCheckoutSession.ExpiresAt,
 		&updatedCheckoutSession.PaidAt,
 		&updatedCheckoutSession.FailedAt,
@@ -231,4 +290,50 @@ func (r *Repository) UpdateCheckoutSession(checkoutSession *CheckoutSession) (*C
 	}
 
 	return &updatedCheckoutSession, nil
+}
+
+func (r *Repository) CountPendingCheckoutSessionsByCompany(companyID string) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM checkout_sessions
+		WHERE company_id = $1
+		AND status = $2
+	`
+
+	var count int
+
+	err := r.DB.QueryRow(
+		context.Background(),
+		query,
+		companyID,
+		CheckoutStatusPending,
+	).Scan(&count)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+func (r *Repository) DeleteCheckoutSessionByID(checkoutSessionID string) error {
+	query := `
+		DELETE FROM checkout_sessions
+		WHERE id = $1
+	`
+
+	commandTag, err := r.DB.Exec(
+		context.Background(),
+		query,
+		checkoutSessionID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return errors.New("checkout session não encontrada para exclusão")
+	}
+
+	return nil
 }

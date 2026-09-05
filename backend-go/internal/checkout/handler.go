@@ -32,10 +32,16 @@ func (h *Handler) CreateSession(c *gin.Context) {
 	}
 
 	input := CreateCheckoutSessionInput{
-		PlanID:      request.PlanID,
-		Auth:        authContext,
-		BillingType: request.BillingType,
-		ChargeType:  request.ChargeType,
+		PlanID:              request.PlanID,
+		Auth:                authContext,
+		BillingType:         request.BillingType,
+		ChargeType:          request.ChargeType,
+		DueDateLimitDays:    request.DueDateLimitDays,
+		MaxInstallmentCount: request.MaxInstallmentCount,
+		SubscriptionCycle:   request.SubscriptionCycle,
+		Description:         request.Description,
+		EndDate:             request.EndDate,
+		NotificationEnabled: request.NotificationEnabled,
 	}
 
 	result, err := h.Service.RegisterCheckoutSession(input)

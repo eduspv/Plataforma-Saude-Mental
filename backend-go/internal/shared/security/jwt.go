@@ -17,7 +17,7 @@ type JWTClaims struct {
 
 func GenerateJWT(secret string, userID string, companyID string, role string, status string) (string, error) {
 	now := time.Now()
-	expiresAt := now.Add(24 * time.Hour)
+	expiresAt := now.Add(7 * 24 * time.Hour)
 
 	println("[JWT] Agora:", now.String())
 	println("[JWT] Expira em:", expiresAt.String())

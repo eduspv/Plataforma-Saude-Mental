@@ -19,6 +19,7 @@ type User struct {
 	CompanyID               *string
 	Name                    string
 	Email                   string
+	Cpf                     *string
 	PasswordHash            string
 	Role                    string
 	Status                  string
