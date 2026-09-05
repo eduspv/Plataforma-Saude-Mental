@@ -181,12 +181,9 @@ export default function HeroSection() {
               md:text-8xl
             "
           >
-            Sua equipe é gente.
+            Sua equipe é formada por pessoas não numeros.
             <br />
 
-            <span className="font-normal italic text-white/95">
-              Não número.
-            </span>
           </h1>
 
           {/* SUBTÍTULO */}
@@ -201,7 +198,7 @@ export default function HeroSection() {
             "
           >
             Triagem inicial de saúde mental com privacidade real,
-            indicadores agregados e conformidade com a NR-1.
+            indicadores agregados e levantamentos de riscos psicossociais em conformidade com a NR-1.
           </p>
 
           {/* FORM */}
