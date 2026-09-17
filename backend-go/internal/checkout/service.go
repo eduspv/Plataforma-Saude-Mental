@@ -94,7 +94,6 @@ func (s *Service) RegisterPIXCheckoutSession(input CreateCheckoutSessionInput, p
 	}
 
 	body := s.getPixPaymentData(checkoutSession, customerID)
-	log.Printf("BODY ASAAS PIX: %+v", body)
 
 	paymentResponse, err := s.Api.CreatePayment(body)
 	if err != nil {

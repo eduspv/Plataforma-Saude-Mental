@@ -6,23 +6,20 @@ import (
 	"backend-go/internal/config"
 	"backend-go/internal/database"
 	"backend-go/internal/router"
+	"backend-go/internal/shared/logger"
 )
 
 func main() {
 	cfg := config.LoadConfig()
+	logger.Init(cfg.AppEnv)
 
-	log.Println("[MAIN] Config carregada")
-	log.Println("[MAIN] APP_PORT:", cfg.AppPort)
-	log.Println("[MAIN] DATABASE_URL carregado?", cfg.DatabaseURL != "")
-	log.Println("[MAIN] JWT_SECRET carregado?", cfg.JWTSecret != "")
-	log.Println("[MAIN] ASAAS_API_KEY carregado?", cfg.ASAASAPIKey != "")
-	log.Println("[MAIN] ASAAS_WEBHOOK_TOKEN carregado?", cfg.ASAASWebhookToken != "")
+	logger.Debug("[MAIN] Config carregada")
+	logger.Debug("[MAIN] APP_PORT: %s", cfg.AppPort)
+	logger.Debug("[MAIN] DATABASE_URL carregado? %t", cfg.DatabaseURL != "")
+	logger.Debug("[MAIN] JWT_SECRET carregado? %t", cfg.JWTSecret != "")
+	logger.Debug("[MAIN] ASAAS_API_KEY carregado? %t (len=%d)", cfg.ASAASAPIKey != "", len(cfg.ASAASAPIKey))
+	logger.Debug("[MAIN] ASAAS_WEBHOOK_TOKEN carregado? %t", cfg.ASAASWebhookToken != "")
 
-	if len(cfg.ASAASAPIKey) > 15 {
-		log.Printf("[DEBUG] API_KEY prefixo=%q len=%d", cfg.ASAASAPIKey[:15], len(cfg.ASAASAPIKey))
-	} else {
-		log.Printf("[DEBUG] API_KEY prefixo=%q len=%d (CURTA DEMAIS)", cfg.ASAASAPIKey, len(cfg.ASAASAPIKey))
-	}
 	//verificação por ser necessario essa validação de segurança
 	if cfg.ASAASWebhookToken == "" {
 		log.Fatal("[MAIN] ASAAS_WEBHOOK_TOKEN não configurado")
