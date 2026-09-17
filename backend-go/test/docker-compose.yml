@@ -1,0 +1,12 @@
+services:
+  postgres-test:
+    image: postgres:17
+    container_name: saude-mental-postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: saude_mental_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
