@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"backend-go/internal/shared/logger"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -19,8 +21,7 @@ func GenerateJWT(secret string, userID string, companyID string, role string, st
 	now := time.Now()
 	expiresAt := now.Add(7 * 24 * time.Hour)
 
-	println("[JWT] Agora:", now.String())
-	println("[JWT] Expira em:", expiresAt.String())
+	logger.Debug("[JWT] Agora: %s Expira em: %s", now.String(), expiresAt.String())
 
 	claims := JWTClaims{
 		UserID:    userID,

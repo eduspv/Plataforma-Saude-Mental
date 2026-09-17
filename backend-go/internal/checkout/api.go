@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
+
+	"backend-go/internal/shared/logger"
 )
 
 type APIClient struct {
@@ -43,8 +44,7 @@ func (a *APIClient) CreateCustomer(body *CreateCustomerRequest) (*CreateCustomer
 	req.Header.Add("User-Agent", "SaudeMentalBackend/1.0.0")
 	req.Header.Add("access_token", a.APIKey)
 
-	log.Printf("[DEBUG_ASAAS] URL=%s", req.URL.String())
-	log.Printf("[DEBUG_ASAAS] header access_token len=%d prefix=%q", len(req.Header.Get("access_token")), req.Header.Get("access_token")[:min(30, len(req.Header.Get("access_token")))])
+	logger.Debug("[ASAAS] chamando %s, access_token presente? %t", req.URL.Path, req.Header.Get("access_token") != "")
 
 	resp, err := a.HTTPClient.Do(req)
 	if err != nil {
@@ -87,7 +87,7 @@ func (a *APIClient) CreatePayment(body *CreatePaymentRequest) (*CreatePaymentRes
 	if err != nil {
 		return nil, err
 	}
-	log.Println("JSON ENVIADO AO ASAAS:", string(bodyJSON))
+	logger.Debug("JSON ENVIADO AO ASAAS: %s", string(bodyJSON))
 
 	req, err := http.NewRequest(http.MethodPost, "https://api-sandbox.asaas.com/v3/payments", bytes.NewBuffer(payloadBytes))
 	if err != nil {
