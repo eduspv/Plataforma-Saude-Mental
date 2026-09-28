@@ -1,8 +1,8 @@
 // cmd/seed/main.go
 //
-// Seed de desenvolvimento: cria uma empresa ATIVA + admin + subscription ativa
-// + um colaborador ATIVO, para permitir testar login e diagnóstico sem depender
-// do fluxo de pagamento (Asaas/webhook).
+// Seed de desenvolvimento: cria DUAS empresas ATIVAS, cada uma com admin +
+// subscription ativa + um colaborador ATIVO, para permitir testar login e
+// diagnóstico sem depender do fluxo de pagamento (Asaas/webhook).
 //
 // Rodar:  go run ./cmd/seed
 //
@@ -31,22 +31,57 @@ import (
 
 // ─────────────────────────────────────────────────────────────
 // DADOS DO SEED — anote isto, é o que você vai usar pra logar.
+// As senhas de cada empresa ficam aqui; nunca são impressas no console.
 // ─────────────────────────────────────────────────────────────
-const (
-	companyName  = "Empresa Seed LTDA"
-	companyCNPJ  = "11222333000181" // CNPJ com dígito verificador válido
-	companyEmail = "empresa.seed@teste.com"
-	companyPhone = "11999990000"
 
-	adminName     = "Admin Seed"
-	adminEmail    = "admin.seed@teste.com"
-	adminPassword = "Seed@1234" // senha forte (maiúscula, minúscula, número, especial, 8+)
+type companySpec struct {
+	companyName  string
+	companyCNPJ  string
+	companyEmail string
+	companyPhone string
 
-	employeeName     = "Colaborador Seed"
-	employeeEmail    = "colaborador.seed@teste.com"
-	employeeCPF      = "52998224725" // CPF com dígito verificador válido
-	employeePassword = "Seed@1234"
-)
+	adminName     string
+	adminEmail    string
+	adminPassword string
+
+	employeeName     string
+	employeeEmail    string
+	employeeCPF      string
+	employeePassword string
+}
+
+var companySpecs = []companySpec{
+	{
+		companyName:  "Empresa Seed LTDA",
+		companyCNPJ:  "11222333000181", // CNPJ com dígito verificador válido
+		companyEmail: "empresa.seed@teste.com",
+		companyPhone: "11999990000",
+
+		adminName:     "Admin Seed",
+		adminEmail:    "admin.seed@teste.com",
+		adminPassword: "Seed@1234", // senha forte (maiúscula, minúscula, número, especial, 8+)
+
+		employeeName:     "Colaborador Seed",
+		employeeEmail:    "colaborador.seed@teste.com",
+		employeeCPF:      "52998224725", // CPF com dígito verificador válido
+		employeePassword: "Seed@1234",
+	},
+	{
+		companyName:  "Empresa Seed 2 LTDA",
+		companyCNPJ:  "10000000000145", // CNPJ com dígito verificador válido
+		companyEmail: "empresa.seed2@teste.com",
+		companyPhone: "11999990001",
+
+		adminName:     "Admin Seed 2",
+		adminEmail:    "admin.seed2@teste.com",
+		adminPassword: "Seed@1234",
+
+		employeeName:     "Colaborador Seed 2",
+		employeeEmail:    "colaborador.seed2@teste.com",
+		employeeCPF:      "10000000019", // CPF com dígito verificador válido
+		employeePassword: "Seed@1234",
+	},
+}
 
 func main() {
 	ctx := context.Background()
@@ -62,7 +97,7 @@ func main() {
 		log.Fatalf("seed diagnóstico falhou: %v", err)
 	}
 
-	// 2. Precisamos de um plano existente pra vincular a subscription.
+	// 2. Precisamos de um plano existente pra vincular as subscriptions.
 	plansRepo := plans.NewRepository(db)
 	activePlans, err := plansRepo.ListActivePlans(ctx)
 	if err != nil {
@@ -74,57 +109,84 @@ func main() {
 	plan := activePlans[0] // pega o primeiro plano ativo
 	log.Printf("[SEED] usando plano: %s (%s)", plan.Name, plan.ID)
 
-	// 3. Monta a empresa e o admin JÁ com status active (pula validação/Asaas).
+	authRepo := auth.NewRepository(db)
+	subsRepo := subscriptions.NewRepository(db)
+	usersRepo := users.NewRepository(db)
+	auditService := audit.NewService(audit.NewRepository(db))
+	usersService := users.NewService(usersRepo, subsRepo, plansRepo, auditService)
+
+	for _, spec := range companySpecs {
+		if err := seedCompany(ctx, db, spec, plan.ID, authRepo, subsRepo, usersService); err != nil {
+			log.Fatalf("[SEED] erro ao criar empresa %q: %v", spec.companyName, err)
+		}
+	}
+
+	fmt.Println("\n─────────────────────────────────────────")
+	fmt.Println(" SEED CONCLUÍDO — empresas de teste criadas:")
+	for _, spec := range companySpecs {
+		fmt.Printf("  Empresa:     %s\n", spec.companyName)
+		fmt.Printf("  Admin:       %s\n", spec.adminEmail)
+		fmt.Printf("  Colaborador: %s\n", spec.employeeEmail)
+	}
+	fmt.Println(" Senhas: consulte as constantes em cmd/seed/main.go (não impressas aqui).")
+	fmt.Println("─────────────────────────────────────────")
+}
+
+// seedCompany cria uma empresa completa: empresa+admin, subscription ativa
+// e colaborador, a partir de uma companySpec.
+func seedCompany(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	spec companySpec,
+	planID string,
+	authRepo *auth.Repository,
+	subsRepo *subscriptions.Repository,
+	usersService *users.Service,
+) error {
 	now := time.Now()
+
+	// 1. Monta a empresa e o admin JÁ com status active (pula validação/Asaas).
 	company := companies.Company{
-		Name:           companyName,
-		CNPJ:           companyCNPJ,
-		CorporateEmail: companyEmail,
-		Phone:          companyPhone,
+		Name:           spec.companyName,
+		CNPJ:           spec.companyCNPJ,
+		CorporateEmail: spec.companyEmail,
+		Phone:          spec.companyPhone,
 		Status:         companies.CompanyStatusActive,
 	}
 
-	adminHash, err := hashPassword(adminPassword)
+	adminHash, err := hashPassword(spec.adminPassword)
 	if err != nil {
-		log.Fatalf("[SEED] erro ao hashear senha do admin: %v", err)
+		return fmt.Errorf("hashear senha do admin: %w", err)
 	}
 	admin := users.User{
-		Name:                    adminName,
-		Email:                   adminEmail,
+		Name:                    spec.adminName,
+		Email:                   spec.adminEmail,
 		PasswordHash:            adminHash,
 		Role:                    "COMPANY_ADMIN",
 		Status:                  users.UserStatusActive,
-		Phone:                   companyPhone,
+		Phone:                   spec.companyPhone,
 		AcceptedTerms:           true,
 		AcceptedTermsAt:         &now,
 		AcceptedPrivacyPolicy:   true,
 		AcceptedPrivacyPolicyAt: &now,
 	}
 
-	// 4. Cria empresa + admin (transacional, dentro do próprio repo).
-	authRepo := auth.NewRepository(db)
-	_, err = authRepo.CreateCompanyAndUser(company, admin)
+	// 2. Cria empresa + admin (transacional, dentro do próprio repo).
+	registerResp, err := authRepo.CreateCompanyAndUser(company, admin)
 	if err != nil {
-		log.Fatalf("[SEED] erro ao criar empresa+admin: %v", err)
+		return fmt.Errorf("criar empresa+admin: %w", err)
 	}
-	log.Println("[SEED] empresa + admin criados")
+	companyID := registerResp.CompanyID
+	log.Printf("[SEED] empresa %q criada (company_id = %s)", spec.companyName, companyID)
 
-	// 5. Recupera o company_id recém-criado (pelo CNPJ, que é único).
-	companyID, err := getCompanyIDByCNPJ(ctx, db, companyCNPJ)
-	if err != nil {
-		log.Fatalf("[SEED] erro ao buscar company_id: %v", err)
-	}
-	log.Printf("[SEED] company_id = %s", companyID)
-
-	// 6. Cria a subscription ATIVA (sem pagamento), satisfazendo o IsPlanActive.
+	// 3. Cria a subscription ATIVA (sem pagamento), satisfazendo o IsPlanActive.
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		log.Fatalf("[SEED] erro ao abrir transação: %v", err)
+		return fmt.Errorf("abrir transação da subscription: %w", err)
 	}
-	subsRepo := subscriptions.NewRepository(db)
 	_, err = subsRepo.CreateTx(ctx, tx, subscriptions.CreateSubscriptionInput{
 		CompanyID:          companyID,
-		PlanID:             plan.ID,
+		PlanID:             planID,
 		LastPaymentID:      nil,
 		Provider:           nil,
 		CurrentPeriodStart: now,
@@ -132,23 +194,20 @@ func main() {
 	})
 	if err != nil {
 		tx.Rollback(ctx)
-		log.Fatalf("[SEED] erro ao criar subscription: %v", err)
+		return fmt.Errorf("criar subscription: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		log.Fatalf("[SEED] erro ao commitar subscription: %v", err)
+		return fmt.Errorf("commitar subscription: %w", err)
 	}
-	log.Println("[SEED] subscription ATIVA criada")
+	log.Printf("[SEED] subscription ATIVA criada para %q", spec.companyName)
 
-	// 7. Agora sim, cria o colaborador via service real (exige subscription ativa).
-	usersRepo := users.NewRepository(db)
-	auditService := audit.NewService(audit.NewRepository(db))
-	usersService := users.NewService(usersRepo, subsRepo, plansRepo, auditService)
+	// 4. Agora sim, cria o colaborador via service real (exige subscription ativa).
 	_, err = usersService.RegisterNewEmployee(&users.UserInput{
 		Req: users.NewEmployeeRequest{
-			Name:                  employeeName,
-			Email:                 employeeEmail,
-			Cpf:                   employeeCPF,
-			Password:              employeePassword,
+			Name:                  spec.employeeName,
+			Email:                 spec.employeeEmail,
+			Cpf:                   spec.employeeCPF,
+			Password:              spec.employeePassword,
 			AcceptedTerms:         true,
 			AcceptedPrivacyPolicy: true,
 		},
@@ -159,15 +218,11 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatalf("[SEED] erro ao criar colaborador: %v", err)
+		return fmt.Errorf("criar colaborador: %w", err)
 	}
-	log.Println("[SEED] colaborador ATIVO criado")
+	log.Printf("[SEED] colaborador ATIVO criado para %q", spec.companyName)
 
-	fmt.Println("\n─────────────────────────────────────────")
-	fmt.Println(" SEED CONCLUÍDO — credenciais pra login:")
-	fmt.Printf("  Admin:       %s / %s\n", adminEmail, adminPassword)
-	fmt.Printf("  Colaborador: %s / %s\n", employeeEmail, employeePassword)
-	fmt.Println("─────────────────────────────────────────")
+	return nil
 }
 
 func seedDiagnosticQuestions(ctx context.Context, db *pgxpool.Pool) error {
@@ -221,15 +276,7 @@ func seedDiagnosticQuestions(ctx context.Context, db *pgxpool.Pool) error {
 	return nil
 }
 
-// adicione ao seed, e o import "golang.org/x/crypto/bcrypt"
 func hashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
-}
-
-func getCompanyIDByCNPJ(ctx context.Context, db *pgxpool.Pool, cnpj string) (string, error) {
-	// precisa import "github.com/jackc/pgx/v5/pgxpool"
-	var id string
-	err := db.QueryRow(ctx, `SELECT id FROM companies WHERE cnpj = $1`, cnpj).Scan(&id)
-	return id, err
 }
